@@ -1,0 +1,44 @@
+venv/
+__pycache__/
+*.pyc
+
+# Bases de datos
+*.db
+*.sqlite
+*.sqlite3
+
+# Expedientes y descargas
+expedientes_clientes/
+temp_downloads/
+static/output/
+
+# Builds
+dist/
+build/
+
+# Logs
+*.log
+
+# Entorno
+.env
+
+# Capturas
+captura_*.png
+error_*.png
+ultimo_error_login.png
+
+# PDFs y pruebas
+test.pdf
+
+# Comprimidos
+*.zip
+LexView_*.zip
+
+# PyInstaller
+
+
+# Extras
+.DS_Store
+Thumbs.db
+IMPORTAR_AQUI/*
+!IMPORTAR_AQUI/.gitkeep
