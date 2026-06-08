@@ -1121,12 +1121,17 @@ def ejecutar_actualizacion(usuario_id, usuario_nombre, socketio, app, fecha_str=
 
                             pdfs_antes = set(_listar_pdfs(ruta))
 
-                            nuevos, total_paginas = descargar_pdfs_nuevos(
+                            resultado_descarga = descargar_pdfs_nuevos(
                                 driver,
                                 ruta,
                                 config.TEMP_DOWNLOAD_PATH
                             )
 
+                            if isinstance(resultado_descarga, tuple):
+                                nuevos, total_paginas = resultado_descarga
+                            else:
+                                nuevos = resultado_descarga
+                                total_paginas = getattr(driver, "paginas_forum_total", 0) or 0
                             pdfs_despues = set(_listar_pdfs(ruta))
                             pdfs_nuevos_paths = list(pdfs_despues - pdfs_antes)
 
@@ -1250,11 +1255,17 @@ def ejecutar_actualizacion(usuario_id, usuario_nombre, socketio, app, fecha_str=
                 # ── contar PDFs antes y después ──────────────────────────────
                 pdfs_antes = set(_listar_pdfs(ruta_final))
 
-                nuevos, total_paginas = descargar_pdfs_nuevos(
+                resultado_descarga = descargar_pdfs_nuevos(
                     driver,
                     ruta_final,
                     config.TEMP_DOWNLOAD_PATH
                 )
+
+                if isinstance(resultado_descarga, tuple):
+                    nuevos, total_paginas = resultado_descarga
+                else:
+                    nuevos = resultado_descarga
+                    total_paginas = getattr(driver, "paginas_forum_total", 0) or 0
 
                 pdfs_despues = set(_listar_pdfs(ruta_final))
                 pdfs_nuevos_paths = list(pdfs_despues - pdfs_antes)
