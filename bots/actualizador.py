@@ -1372,6 +1372,23 @@ def ejecutar_actualizacion(usuario_id, usuario_nombre, socketio, app, fecha_str=
 
         expedientes_parciales = []
 
+        numeros_actualizados = {
+            str(e.get('nro', e.get('numero', ''))).strip()
+            for e in acumulador_pdfs
+            if str(e.get('nro', e.get('numero', ''))).strip()
+        }
+
+        actualizados_por_numero = {
+            str(e.get('nro', e.get('numero', ''))).strip(): e
+            for e in acumulador_pdfs
+            if str(e.get('nro', e.get('numero', ''))).strip()
+        }
+
+        print("=" * 80)
+        print("NUMEROS ACTUALIZADOS PARA MODAL PARCIAL:")
+        print(numeros_actualizados)
+        print("=" * 80)
+
         with app.app_context():
 
             causas_parciales = CausaInfo.query.filter(
@@ -1380,6 +1397,13 @@ def ejecutar_actualizacion(usuario_id, usuario_nombre, socketio, app, fecha_str=
             ).all()
 
             for c in causas_parciales:
+                nro_c = str(c.numero or "").strip()
+
+                # CLAVE: solo mostrar en el modal los que se tocaron en esta actualización
+                if nro_c not in numeros_actualizados:
+                    continue
+
+                fuente = actualizados_por_numero.get(nro_c, {})
 
                 faltan = max(
                     (c.paginas_forum_total or 0) -
@@ -1389,12 +1413,14 @@ def ejecutar_actualizacion(usuario_id, usuario_nombre, socketio, app, fecha_str=
 
                 expedientes_parciales.append({
                     "nro": c.numero,
+                    "numero": c.numero,
                     "forum_total": c.paginas_forum_total or 0,
                     "descargadas": c.paginas_descargadas_total or 0,
                     "faltan": faltan,
-                    "juzgado": c.juzgado or "",
-                    "secretaria": c.secretaria or "",
-                    "tipo": c.tipo or ""
+                    "juzgado": fuente.get("juzgado") or c.juzgado or "",
+                    "secretaria": fuente.get("secretaria") or c.secretaria or "",
+                    "tipo": fuente.get("tipo") or c.tipo or "",
+                    "localidad": fuente.get("localidad") or c.localidad or "Capital",
                 })
         socketio.emit('actualizacion_completa', {
             'total': total,
