@@ -942,6 +942,8 @@ socket.on('actualizacion_completa', function(data) {
                 causa_id: e.causa_id || '',
                 juzgado: e.juzgado,
                 secretaria: e.secretaria,
+                tipo: e.tipo || '',
+                localidad: e.localidad || 'Capital',
                 cantidad: cantidad
             };
         });
