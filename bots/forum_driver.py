@@ -786,12 +786,23 @@ def sincronizar_pdfs(
             for _ in range(10):
                 t_mod.sleep(0.8)
 
-                headers = tabla_actuaciones.find_elements(By.XPATH, ".//tr[1]/th")
-                textos_headers = [h.text.strip() for h in headers]
+                try:
+                    tabla_actuaciones = esperar_tabla_actuaciones(driver, timeout=10)
+                    headers = tabla_actuaciones.find_elements(By.XPATH, ".//tr[1]/th")
+                    textos_headers = [h.text.strip() for h in headers]
 
-                if headers and any(textos_headers):
-                    break
+                    if headers and any(textos_headers):
+                        break
 
+                except StaleElementReferenceException:
+                    print("⚠️ Tabla stale al leer headers, reintentando...")
+                    tabla_actuaciones = esperar_tabla_actuaciones(driver, timeout=10)
+                    continue
+
+                except Exception as e:
+                    print(f"⚠️ Error leyendo headers, reintentando: {e}")
+                    tabla_actuaciones = esperar_tabla_actuaciones(driver, timeout=10)
+                    continue
                 tabla_actuaciones = esperar_tabla_actuaciones(driver, timeout=10)
 
             else:
@@ -813,6 +824,7 @@ def sincronizar_pdfs(
         idx_map = {}
 
         try:
+            tabla_actuaciones = esperar_tabla_actuaciones(driver, timeout=15)
             headers = tabla_actuaciones.find_elements(By.XPATH, ".//tr[1]/th")
 
             for i, h in enumerate(headers):

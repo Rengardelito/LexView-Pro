@@ -300,7 +300,7 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
                     tipo = e.get("tipo", "")
                     juzgado = e.get("juzgado", "") or ""
                     secretaria = e.get("secretaria", "") or ""
-
+                    localidad = e.get("localidad") or "Capital"
                     if not secretaria or "SIN" in secretaria.upper():
                         db_causa = CausaInfo.query.filter(
                             CausaInfo.numero == nro,
@@ -313,13 +313,14 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
                             tipo = db_causa.tipo or tipo
 
                     lista_causas.append({
-                        "numero": nro,
-                        "tipo": tipo,
-                        "juzgado": juzgado or "SIN JUZGADO",
-                        "secretaria": secretaria or "SIN SECRETARIA",
-                        "localidad": e.get("localidad", "Capital"),
-                        "cantidad": e.get("cantidad"),
-                    })
+                    "numero": nro,
+                    "tipo": tipo,
+                    "juzgado": juzgado or "SIN JUZGADO",
+                    "secretaria": secretaria or "SIN SECRETARIA",
+                    "localidad": localidad,
+                    "cantidad": e.get("cantidad"),
+                })
+                    
 
         else:
             with app.app_context():
@@ -388,7 +389,7 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
                     juzgado = db_causa.juzgado or causa["juzgado"]
                     secretaria = db_causa.secretaria or causa["secretaria"]
                     tipo = db_causa.tipo or tipo
-                    localidad_expte = db_causa.localidad or localidad_expte
+                    localidad_expte = causa.get("localidad") or db_causa.localidad or "Capital"
                 else:
                     juzgado = causa["juzgado"]
                     secretaria = causa["secretaria"]
