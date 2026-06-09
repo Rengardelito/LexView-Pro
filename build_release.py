@@ -23,7 +23,7 @@ UPDATABLE_DIRS  = ["bots", "helpers", "templates", "static"]
 
 # Extensiones a excluir del zip
 EXCLUDE_EXTENSIONS = {".pyc", ".pyo", ".DS_Store"}
-EXCLUDE_DIRS       = {"__pycache__", ".git", ".pytest_cache"}
+EXCLUDE_DIRS       = {"__pycache__", ".git", ".pytest_cache", "output"}
 
 
 def build_zip(version: str, project_root: Path) -> Path:
