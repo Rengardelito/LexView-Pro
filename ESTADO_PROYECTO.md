@@ -254,3 +254,47 @@ d78ccf9
 
 
 
+\---
+
+
+
+\## HITO CONFIRMADO - AUTO UPDATE
+
+
+
+Fecha: 09/06/2026
+
+
+
+Se validó correctamente el sistema de actualización automática.
+
+
+
+Prueba realizada:
+
+
+
+\- Instalación inicial: 2.3.2
+
+\- Versión remota publicada: 2.3.3
+
+\- Repo GitHub: https://github.com/Rengardelito/LexView-Pro
+
+\- Release usado: v2.3.3
+
+\- ZIP: lexview-update-2.3.3.zip
+
+\- SHA256: 938d14ef0c028e352142a9daa33c9369d6e50454cbf25bb5165c9fb28c2f1970
+
+\- VPS /api/version apuntando al repo nuevo LexView-Pro
+
+\- Resultado: LexView detectó la actualización, descargó el ZIP, aplicó el update y abrió correctamente.
+
+
+
+Estado:
+
+
+
+AUTO-UPDATE FUNCIONANDO END-TO-END.
+
