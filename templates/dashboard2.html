@@ -1290,7 +1290,10 @@ socket.on('bot_finished', function() {
 
 
         function confirmarSyncCantidad(modo, cantidad) {
-            cerrarModalCantidadSync();
+            var modal = document.getElementById('modal-sync-camada');
+            if (modal) {
+                modal.remove();
+            }
 
             document.getElementById('monitor-proceso').style.display = 'block';
 
@@ -1307,11 +1310,11 @@ socket.on('bot_finished', function() {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.success && !data.ok) {
-                    alert(data.message || 'No se pudo iniciar la sincronización.');
+                    alert(data.error || 'Error iniciando sincronización');
                 }
             })
             .catch(function(err) {
-                alert('Error iniciando sincronización: ' + err);
+                alert('Error: ' + err);
             });
         }
 
