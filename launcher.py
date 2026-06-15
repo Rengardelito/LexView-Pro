@@ -44,6 +44,8 @@ from tkinter import ttk, messagebox
 
 # ── Configuración ────────────────────────────────────────────
 VPS_VERSION_URL  = "https://lexviewpro.com.ar/api/version"
+VPS_LICENSE_URL  = "https://lexviewpro.com.ar/api/verify"
+LICENSE_GRACE_DAYS = 10
 VERSION_FILE     = "version.txt"
 FLASK_PORT       = 5000
 FLASK_STARTUP_TIMEOUT = 15  # segundos esperando que Flask levante
@@ -110,15 +112,14 @@ def version_tuple(v: str):
         return tuple(int(x) for x in v.strip().split("."))
     except ValueError:
         return (0, 0, 0)
-
-
+    
 def checksum_ok(filepath: Path, expected_sha256: str) -> bool:
     """Verifica integridad del archivo descargado."""
     sha256 = hashlib.sha256()
     with open(filepath, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             sha256.update(chunk)
-    return sha256.hexdigest() == expected_sha256
+    return sha256.hexdigest() == expected_sha256    
 
 
 # ════════════════════════════════════════════════════════════
@@ -218,6 +219,120 @@ class AutoUpdater:
         self.local_version = get_local_version()
         self.hw_id = get_hardware_id()
 
+    def check_license(self) -> bool:
+        """
+        Valida licencia contra VPS.
+        Si no hay conexión, permite modo offline solo por LICENSE_GRACE_DAYS.
+        """
+        if not self.hw_id:
+            messagebox.showerror(
+                "Licencia no válida",
+                "No se pudo identificar esta computadora.\nContactá al soporte de LexView Pro."
+            )
+            return False
+
+        config_path = self.base_dir / "data" / "config_local.json"
+
+        def cargar_config():
+            try:
+                if config_path.exists():
+                    return json.loads(config_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+            return {}
+
+        def guardar_config(data):
+            config_path.parent.mkdir(exist_ok=True)
+            config_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+        try:
+            self.splash.set_status("Verificando licencia...", 3)
+
+            resp = requests.post(
+                VPS_LICENSE_URL,
+                json={"hardware_id": self.hw_id},
+                timeout=8,
+            )
+
+            if resp.status_code != 200:
+                messagebox.showerror(
+                    "Licencia no válida",
+                    "No se pudo validar la licencia.\nContactá al soporte de LexView Pro."
+                )
+                return False
+
+            data = resp.json()
+
+            activa = (
+                data.get("valid") is True
+                or data.get("active") is True
+                or data.get("licencia_activa") is True
+                or data.get("ok") is True
+            )
+
+            if not activa:
+                cfg = cargar_config()
+                cfg["license_blocked"] = True
+                cfg["license_status"] = data.get("reason", "inactive")
+                guardar_config(cfg)
+
+                messagebox.showerror(
+                    "Licencia inhabilitada",
+                    "La licencia de LexView Pro se encuentra inhabilitada.\nContactá al soporte para regularizar el servicio."
+                )
+                return False
+
+            cfg = cargar_config()
+            cfg["hardware_id"] = self.hw_id
+            cfg["license_blocked"] = False
+            cfg["license_status"] = "active"
+            cfg["license_plan"] = data.get("plan")
+            cfg["license_vence"] = data.get("vence")
+            cfg["last_license_check"] = time.strftime("%Y-%m-%d")
+            guardar_config(cfg)
+
+            log.info("Licencia validada correctamente.")
+            return True
+
+        except Exception as e:
+            log.warning(f"No se pudo validar licencia online: {e}")
+
+            cfg = cargar_config()
+
+            if cfg.get("license_blocked") is True:
+                messagebox.showerror(
+                    "Licencia bloqueada",
+                    "Esta licencia fue marcada como inhabilitada.\nContactá al soporte de LexView Pro."
+                )
+                return False
+
+            last_check = cfg.get("last_license_check")
+
+            if not last_check:
+                messagebox.showerror(
+                    "Sin validación de licencia",
+                    "No se pudo conectar al servidor de licencias y esta instalación no tiene una validación previa.\nConectá a internet para activar LexView Pro."
+                )
+                return False
+
+            try:
+                from datetime import datetime
+                last_dt = datetime.strptime(last_check, "%Y-%m-%d")
+                today = datetime.now()
+                days = (today - last_dt).days
+            except Exception:
+                days = LICENSE_GRACE_DAYS + 1
+
+            if days <= LICENSE_GRACE_DAYS:
+                log.warning(f"Modo offline permitido. Días desde última validación: {days}")
+                return True
+
+            messagebox.showerror(
+                "Licencia sin verificar",
+                f"No se pudo validar la licencia durante más de {LICENSE_GRACE_DAYS} días.\nConectá a internet para continuar usando LexView Pro."
+            )
+            return False
+
     # ── 1. Verificar versión ──────────────────────────────────
     def check_for_update(self) -> dict | None:
         """
@@ -285,7 +400,6 @@ class AutoUpdater:
 
             log.info(f"Zip descargado en: {zip_path}")
 
-            # Verificar checksum si el servidor lo provee
             if expected_sha256:
                 if not checksum_ok(zip_path, expected_sha256):
                     log.error("Checksum inválido. Abortando update.")
@@ -304,19 +418,9 @@ class AutoUpdater:
         """
         Extrae el zip sobre _internal/, reemplazando solo los archivos
         de código. Nunca toca data/ ni config_local.json.
-
-        Estructura esperada dentro del zip:
-          update/
-          ├── app.py
-          ├── config.py
-          ├── bots/
-          ├── helpers/
-          ├── templates/
-          └── static/
         """
         self.splash.set_status("Creando backup...", 62)
 
-        # Backup de seguridad de los archivos actuales
         backup_dir = self.base_dir / f"_backup_{self.local_version}"
         try:
             self._backup_current(backup_dir)
@@ -330,7 +434,6 @@ class AutoUpdater:
                 members = zf.namelist()
 
                 for member in members:
-                    # Normalizar ruta: quitar prefijo "update/" si existe
                     rel_path = Path(member)
                     parts = rel_path.parts
                     if parts and parts[0] in ("update", "update/"):
@@ -339,13 +442,11 @@ class AutoUpdater:
                     if rel_path is None or str(rel_path) == ".":
                         continue
 
-                    # Verificar que no pisa archivos protegidos
                     top_level = rel_path.parts[0] if rel_path.parts else ""
                     if top_level in PROTECTED_DIRS or str(rel_path) in PROTECTED_FILES:
                         log.info(f"Saltando archivo protegido: {rel_path}")
                         continue
 
-                    # Verificar que el archivo está en la lista de actualizables
                     is_updatable = (
                         str(rel_path) in UPDATABLE_FILES
                         or top_level in UPDATABLE_DIRS
@@ -354,23 +455,20 @@ class AutoUpdater:
                         log.info(f"Saltando archivo no autorizado: {rel_path}")
                         continue
 
-                    # Extraer
                     dest = self.internal_dir / rel_path
                     dest.parent.mkdir(parents=True, exist_ok=True)
 
-                    if not member.endswith("/"):  # no es directorio
+                    if not member.endswith("/"):
                         with zf.open(member) as src, open(dest, "wb") as dst:
                             shutil.copyfileobj(src, dst)
                         log.info(f"Actualizado: {rel_path}")
 
                     self.splash.pump()
 
-            # Actualizar version.txt SOLO si todo salió bien
             version_path = self.internal_dir / VERSION_FILE
             version_path.write_text(new_version, encoding="utf-8")
             log.info(f"Versión actualizada a {new_version}")
 
-            # Limpiar backup si el update fue exitoso
             if backup_dir.exists():
                 shutil.rmtree(backup_dir, ignore_errors=True)
 
@@ -422,10 +520,10 @@ class AutoUpdater:
         if not update_info:
             return False
 
-        new_version   = update_info["version"]
-        download_url  = update_info["download_url"]
-        sha256        = update_info.get("sha256")
-        changelog     = update_info.get("changelog", "")
+        new_version = update_info["version"]
+        download_url = update_info["download_url"]
+        sha256 = update_info.get("sha256")
+        changelog = update_info.get("changelog", "")
 
         msg = f"Hay una nueva versión disponible: v{new_version}\n"
         if changelog:
@@ -461,23 +559,20 @@ class AutoUpdater:
             )
 
             self.splash.close()
-
             os.execv(sys.executable, [sys.executable] + sys.argv)
 
             return True
 
-        else:
-            try:
-                shutil.rmtree(zip_path.parent, ignore_errors=True)
-            except Exception:
-                pass
+        try:
+            shutil.rmtree(zip_path.parent, ignore_errors=True)
+        except Exception:
+            pass
 
-            messagebox.showerror(
-                "Error en la actualización",
-                "No se pudo aplicar la actualización.\nSe restauró la versión anterior."
-            )
-            return False
-
+        messagebox.showerror(
+            "Error en la actualización",
+            "No se pudo aplicar la actualización.\nSe restauró la versión anterior."
+        )
+        return False
 
 # ════════════════════════════════════════════════════════════
 # LANZADOR DE FLASK
@@ -570,6 +665,10 @@ def main():
 
     # ── Auto-updater ─────────────────────────────────────────
     updater = AutoUpdater(splash)
+    if not updater.check_license():
+        splash.close()
+        sys.exit(1)
+
     updated = updater.run()
 
     if updated:
