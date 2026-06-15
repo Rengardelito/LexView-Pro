@@ -645,37 +645,34 @@
         </div>
 
         <div class="sidebar">
-            <div class="import-box">
-                <details open>
-                    <summary style="color:var(--blue); cursor:pointer; font-size:0.78rem; font-weight:600; font-family:var(--mono);">🚀 IMPORTAR CARPETAS</summary>
-                    <p>Copiá los expedientes en <strong style="color:var(--text-bright);">IMPORTAR_AQUI</strong> y presioná el botón.</p>
-                    <button class="btn-import" onclick="iniciarImportacion()">INICIAR MIGRACIÓN</button>
-                </details>
-                <div style="border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px;">
-                    <div style="color:var(--blue); font-size:0.78rem; font-weight:600; font-family:var(--mono); margin-bottom:6px;">📋 IMPORTAR LISTA</div>
-                    <p style="font-size:0.7rem; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">
-                        Escribí los números completos uno por línea o pegá desde Excel.<br>
-                        <span style="color:var(--text); font-family:var(--mono); font-size:0.65rem;">Ej: C01 45787/99 · EXP 218015/21</span>
-                    </p>
-                    <textarea id="lista-importar" style="width:100%; height:80px; background:var(--bg); border:1px solid var(--border2); color:var(--text-bright); border-radius:5px; padding:7px 8px; font-size:0.72rem; font-family:var(--mono); resize:vertical; outline:none; margin-bottom:8px;" placeholder="C01 45787/99&#10;EXP 218015/21&#10;..."></textarea>
-                    <div style="margin-bottom:8px;">
-                        <input type="file" id="excel-importar" accept=".xlsx,.xls,.csv" style="font-size:0.68rem; color:var(--text-dim); font-family:var(--mono); width:100%;">
-                    </div>
-                    <button class="btn-import" onclick="iniciarImportarLista()" style="background: #00897b;">CREAR CARPETAS</button>
-                </div>
-                <div style="border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px;">
-                    <div style="color:#e91e63; font-size:0.78rem; font-weight:600; font-family:var(--mono); margin-bottom:6px;">💾 IMPORTAR BACKUP</div>
-                    <p style="font-size:0.7rem; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">
-                        Pegá la ruta completa de la carpeta backup.<br>
-                        <span style="color:var(--text); font-family:var(--mono); font-size:0.65rem;">Ej: C:\Users\...\EXPTE CLIENTE</span>
-                    </p>
-                    <input type="text" id="ruta-backup" 
-                        style="width:100%; background:var(--bg); border:1px solid var(--border2); color:var(--text-bright); border-radius:5px; padding:7px 8px; font-size:0.72rem; font-family:var(--mono); outline:none; margin-bottom:8px;"
-                        placeholder="C:\Users\...\EXPTE CLIENTE">
-                    <button class="btn-import" onclick="iniciarImportarBackup()" style="background:#c2185b;">IMPORTAR BACKUP</button>
-                </div>
+    <div class="import-box">
+        <div>
+            <div style="color:var(--blue); font-size:0.78rem; font-weight:600; font-family:var(--mono); margin-bottom:6px;">📋 IMPORTAR LISTA</div>
+            <p style="font-size:0.7rem; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">
+                Escribí los números completos uno por línea o pegá desde Excel.<br>
+                <span style="color:var(--text); font-family:var(--mono); font-size:0.65rem;">Ej: C01 45787/99 · EXP 218015/21</span>
+            </p>
+            <textarea id="lista-importar" style="width:100%; height:80px; background:var(--bg); border:1px solid var(--border2); color:var(--text-bright); border-radius:5px; padding:7px 8px; font-size:0.72rem; font-family:var(--mono); resize:vertical; outline:none; margin-bottom:8px;" placeholder="C01 45787/99&#10;EXP 218015/21&#10;..."></textarea>
+            <div style="margin-bottom:8px;">
+                <input type="file" id="excel-importar" accept=".xlsx,.xls,.csv" style="font-size:0.68rem; color:var(--text-dim); font-family:var(--mono); width:100%;">
             </div>
-            <div class="sidebar-section">
+            <button class="btn-import" onclick="iniciarImportarLista()" style="background: #00897b;">CREAR CARPETAS</button>
+        </div>
+
+        <div style="border-top: 1px solid var(--border); margin-top: 14px; padding-top: 14px;">
+            <div style="color:#e91e63; font-size:0.78rem; font-weight:600; font-family:var(--mono); margin-bottom:6px;">💾 IMPORTAR BACKUP</div>
+            <p style="font-size:0.7rem; color:var(--text-dim); line-height:1.5; margin-bottom:8px;">
+                Pegá la ruta completa de la carpeta backup.<br>
+                <span style="color:var(--text); font-family:var(--mono); font-size:0.65rem;">Ej: C:\Users\...\EXPTE CLIENTE</span>
+            </p>
+            <input type="text" id="ruta-backup"
+                style="width:100%; background:var(--bg); border:1px solid var(--border2); color:var(--text-bright); border-radius:5px; padding:7px 8px; font-size:0.72rem; font-family:var(--mono); outline:none; margin-bottom:8px;"
+                placeholder="C:\Users\...\EXPTE CLIENTE">
+            <button class="btn-import" onclick="iniciarImportarBackup()" style="background:#c2185b;">IMPORTAR BACKUP</button>
+        </div>
+    </div>
+
+    <div class="sidebar-section">
                 <div class="sidebar-title">🔴 VENCIMIENTOS</div>
                 {% for v in vencimientos_db %}
                 <div class="vence-item">
@@ -717,6 +714,7 @@
         let vistaActual = 'tarjetas';
         let panelCardActual = null;
         var socket = io();
+        window.__syncCantidadEnCurso = false;
 
 
         // ── Dashboard V2: menú de acciones y filtros rápidos ───────────────
@@ -974,6 +972,7 @@ function setCantidadCompletar(idx, cantidad) {
 }
 
 socket.on('bot_finished', function() {
+    window.__syncCantidadEnCurso = false;
     document.getElementById('monitor-proceso').innerHTML += 
         '<div style="color:#00e676;font-weight:700;margin-top:6px;">▶ PROCESO FINALIZADO — RECARGANDO...</div>';
     setTimeout(function() { location.reload(); }, 2500);
@@ -1212,6 +1211,11 @@ socket.on('bot_finished', function() {
         
 
         function mostrarModalCantidadSync(modo, expedientes) {
+            if (window.__syncCantidadEnCurso) {
+                alert('Ya hay una sincronización en curso. Esperá a que termine antes de iniciar otra.');
+                return;
+            }
+
             var modalExistente = document.getElementById('modal-cantidad-sync');
             if (modalExistente) {
                 document.body.removeChild(modalExistente);
@@ -1253,15 +1257,15 @@ socket.on('bot_finished', function() {
 
                     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
 
-                        '<button onclick="confirmarSyncCantidad(\''+modo+'\', 5)" class="btn-modal-sync">' +
+                        '<button onclick="confirmarSyncCantidad(\''+modo+'\', 5, this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                             'Últimas 5' +
                         '</button>' +
 
-                        '<button onclick="confirmarSyncCantidad(\''+modo+'\', 10)" class="btn-modal-sync">' +
+                        '<button onclick="confirmarSyncCantidad(\''+modo+'\', 10, this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                             'Últimas 10' +
                         '</button>' +
 
-                        '<button onclick="confirmarSyncCantidad(\''+modo+'\', \'todas\')" class="btn-modal-sync">' +
+                        '<button onclick="confirmarSyncCantidad(\''+modo+'\', \'todas\', this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                             'Todas' +
                         '</button>' +
 
@@ -1289,13 +1293,33 @@ socket.on('bot_finished', function() {
         }
 
 
-        function confirmarSyncCantidad(modo, cantidad) {
-            var modal = document.getElementById('modal-sync-camada');
-            if (modal) {
-                modal.remove();
+        function confirmarSyncCantidad(modo, cantidad, boton) {
+            if (window.__syncCantidadEnCurso) {
+                console.warn('Sincronización ya en curso. Click ignorado.');
+                return;
             }
 
-            document.getElementById('monitor-proceso').style.display = 'block';
+            window.__syncCantidadEnCurso = true;
+
+            document.querySelectorAll('.btn-sync-cantidad-opcion').forEach(function(btn) {
+                btn.disabled = true;
+                btn.style.opacity = '0.55';
+                btn.style.cursor = 'not-allowed';
+            });
+
+            if (boton) {
+                boton.innerText = 'Iniciando...';
+            }
+
+            // IMPORTANTE: el modal real se llama modal-cantidad-sync.
+            // Antes buscaba modal-sync-camada, por eso no se cerraba.
+            cerrarModalCantidadSync();
+
+            var monitor = document.getElementById('monitor-proceso');
+            if (monitor) {
+                monitor.style.display = 'block';
+                monitor.innerHTML += '<div style="color:#00bcd4;font-weight:700;margin-top:6px;">▶ SINCRONIZACIÓN INICIADA</div>';
+            }
 
             fetch('/run_sincronizar_con_cantidad', {
                 method: 'POST',
@@ -1310,10 +1334,12 @@ socket.on('bot_finished', function() {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (!data.success && !data.ok) {
-                    alert(data.error || 'Error iniciando sincronización');
+                    window.__syncCantidadEnCurso = false;
+                    alert(data.error || data.message || 'Error iniciando sincronización');
                 }
             })
             .catch(function(err) {
+                window.__syncCantidadEnCurso = false;
                 alert('Error: ' + err);
             });
         }
@@ -1440,20 +1466,20 @@ socket.on('bot_finished', function() {
                         '<label style="font-size:0.62rem;color:var(--text-dim);letter-spacing:1px;display:block;margin-bottom:8px;">CANTIDAD A DESCARGAR</label>' +
                         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
 
-                            '<button onclick="confirmarAuditoriaCantidad(5)" class="btn-modal-sync">' +
+                            '<button onclick="confirmarSyncCantidad(\'todos\', 5, this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                                 'Últimas 5' +
                             '</button>' +
 
-                            '<button onclick="confirmarAuditoriaCantidad(10)" class="btn-modal-sync">' +
+                            '<button onclick="confirmarSyncCantidad(\'todos\', 10, this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                                 'Últimas 10' +
                             '</button>' +
 
-                            '<button onclick="confirmarAuditoriaCantidad(\'todas\')" class="btn-modal-sync">' +
+                            '<button onclick="confirmarSyncCantidad(\'todos\', \'todas\', this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                                 'Todas' +
                             '</button>' +
 
-                            '<button onclick="cerrarModalAuditoria()" class="btn-modal-sync btn-sec">' +
-                                'Cancelar' +
+                            '<button onclick="cerrarModalCamada()" class="btn-modal-sync btn-sec">' +
+                                'Elegir después' +
                             '</button>' +
 
                         '</div>' +
@@ -1577,17 +1603,17 @@ socket.on('bot_finished', function() {
                 '¿Cuántas actuaciones querés descargar de cada expediente?' +
             '</div>' +
 
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
 
-                '<button onclick="confirmarSyncCantidad(\'todos\', 5)" class="btn-modal-sync">' +
+                '<button onclick="confirmarSyncCantidad(\'todos\', 5, this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                     'Últimas 5' +
                 '</button>' +
 
-                '<button onclick="confirmarSyncCantidad(\'todos\', 10)" class="btn-modal-sync">' +
+                '<button onclick="confirmarSyncCantidad(\'todos\', 10, this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                     'Últimas 10' +
                 '</button>' +
 
-                '<button onclick="confirmarSyncCantidad(\'todos\', \'todas\')" class="btn-modal-sync">' +
+                '<button onclick="confirmarSyncCantidad(\'todos\', \'todas\', this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
                     'Todas' +
                 '</button>' +
 

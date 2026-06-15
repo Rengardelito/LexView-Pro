@@ -123,6 +123,44 @@ def _buscar_causa_existente(usuario_id, tipo, numero_base, anio, numero_visible)
     ).first()
 
 
+
+def inferir_localidad_por_juzgado(juzgado, localidad_actual="Capital"):
+    texto = (juzgado or "").upper()
+
+    mapa = {
+        "SALADAS": "Saladas",
+        "GOYA": "Goya",
+        "CURUZU": "Curuzú Cuatiá",
+        "CURUZÚ": "Curuzú Cuatiá",
+        "MONTE CASEROS": "Monte Caseros",
+        "SANTO TOME": "Santo Tomé",
+        "SANTO TOMÉ": "Santo Tomé",
+        "PASO DE LA PATRIA": "Paso de la Patria",
+        "PASO DE LOS LIBRES": "Paso de los Libres",
+        "BELLA VISTA": "Bella Vista",
+        "ALVEAR": "Alvear",
+        "MERCEDES": "Mercedes",
+        "ESQUINA": "Esquina",
+        "ITUZAINGO": "Ituzaingo",
+        "ITA IBATE": "Ita Ibate",
+        "ITATI": "Itati",
+        "SAN ROQUE": "San Roque",
+        "SAN LUIS": "San Luis del Palmar",
+        "SAN COSME": "San Cosme",
+        "SANTA LUCIA": "Santa Lucia",
+        "SANTA ROSA": "Santa Rosa",
+        "SAUCE": "Sauce",
+        "YAPEYU": "Yapeyu",
+    }
+
+    for clave, localidad in mapa.items():
+        if clave in texto:
+            return localidad
+
+    return localidad_actual or "Capital"
+
+
+
 def ejecutar_clasificacion(usuario_id, usuario_nombre, socketio, app):
     with app.app_context():
         from database.models import Usuario
@@ -233,7 +271,7 @@ def ejecutar_clasificacion(usuario_id, usuario_nombre, socketio, app):
                 juz_final = datos.get('juzgado') or juz_final
                 sec_final = datos.get('secretaria') or sec_final
                 demandado_final = datos.get('caratula') or demandado_final
-
+                localidad_final = inferir_localidad_por_juzgado(juz_final, localidad_busqueda)
                 tipo_final = (datos.get('tipo') or tipo_inicial or "").strip().upper()
 
                 nro_forum = datos.get('nro_completo') or numero_visible_inicial
@@ -319,7 +357,7 @@ def ejecutar_clasificacion(usuario_id, usuario_nombre, socketio, app):
                             tipo=tipo_final,
                             numero_base=numero_base_final,
                             anio=anio_final,
-                            localidad=localidad_busqueda,
+                            localidad=localidad_final,
                             nombre_carpeta=nombre_folder,
 
                             juzgado=juz_final,
@@ -365,7 +403,7 @@ def ejecutar_clasificacion(usuario_id, usuario_nombre, socketio, app):
                         existe.juzgado = juz_final
                         existe.secretaria = sec_final
                         existe.demandado = demandado_final
-                        existe.localidad = localidad_busqueda
+                        existe.localidad = localidad_final
                         existe.nombre_carpeta = nombre_folder
                         cambio = True
 

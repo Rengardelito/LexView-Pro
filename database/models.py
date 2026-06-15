@@ -21,15 +21,52 @@ class Usuario(UserMixin, db.Model):
     alcance         = db.Column(db.String(20), default='capital')
     hardware_id     = db.Column(db.String(64), nullable=True)
 
+    # Límites comerciales/licencia
+    # Profesional: max_matriculas=1, max_dispositivos=1
+    # Estudio:     max_matriculas=3, max_dispositivos=2
+    max_matriculas   = db.Column(db.Integer, default=1)
+    max_dispositivos = db.Column(db.Integer, default=1)
+
     causas       = db.relationship('CausaInfo', backref='owner', lazy=True)
     vencimientos = db.relationship('Vencimiento', backref='owner', lazy=True)
     notas        = db.relationship('NotaPersonal', backref='owner', lazy=True)
+
+    matriculas_forum = db.relationship(
+        'MatriculaForum',
+        backref='owner',
+        lazy=True,
+        cascade="all, delete-orphan"
+    )
 
     def set_password(self, raw_password: str):
         self.password_hash = generate_password_hash(raw_password)
 
     def check_password(self, raw_password: str) -> bool:
         return check_password_hash(self.password_hash, raw_password)
+
+
+class MatriculaForum(db.Model):
+    __tablename__ = 'matricula_forum'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    usuario_id = db.Column(
+        db.Integer,
+        db.ForeignKey('usuario.id'),
+        nullable=False,
+        index=True
+    )
+
+    nombre = db.Column(db.String(120), nullable=True)
+    matricula = db.Column(db.String(50), nullable=False)
+
+    forum_user = db.Column(db.String(120), nullable=False)
+    forum_pass = db.Column(db.String(120), nullable=False)
+
+    activa = db.Column(db.Boolean, default=True)
+    es_principal = db.Column(db.Boolean, default=False)
+
+    fecha_creacion = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class CausaInfo(db.Model):

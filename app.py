@@ -1,26 +1,47 @@
-import re
-from database.models import CausaInfo, db
-import time
-import shutil
-import os
-import threading
+# ============================================================
+# IMPORTS
+# ============================================================
 import json
+import os
+import re
+import threading
 from datetime import date, datetime
 from pathlib import Path
-from collections import defaultdict
-from config import LICENSE_SERVER_URL
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_from_directory, make_response
-from flask_socketio import SocketIO
-from flask_login import LoginManager, login_required, current_user, login_user, logout_user
-from fpdf import FPDF
-import fitz
 
 import config
-from config import BASE_PATH, BASE_DATOS_PDFS, OUTPUT_STATIC, CARPETA_HOTFOLDER
-from database.models import db, Usuario, CausaInfo, Vencimiento, NotaPersonal
-from helpers.expte_parser import extraer_nro_expte_de_emergencia
-from helpers.migrador_old import ejecutar_migracion_legado
-from helpers.features import requiere_feature, tiene_feature, get_plan, max_exptes_trial
+from config import BASE_DATOS_PDFS, CARPETA_HOTFOLDER, OUTPUT_STATIC
+from database.models import CausaInfo, NotaPersonal, Usuario, Vencimiento, db
+from flask import (
+    Flask,
+    flash,
+    jsonify,
+    make_response,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
+from flask_login import (
+    LoginManager,
+    current_user,
+    login_required,
+    login_user,
+    logout_user,
+)
+from flask_socketio import SocketIO
+from fpdf import FPDF  # type: ignore[reportMissingImports]
+import fitz  # type: ignore[reportMissingImports]
+
+from helpers.features import get_plan, max_exptes_trial, requiere_feature
+
+try:
+    from watchdog.events import FileSystemEventHandler  # type: ignore[reportMissingImports]
+    from watchdog.observers import Observer  # type: ignore[reportMissingImports]
+except Exception:
+    FileSystemEventHandler = object
+    Observer = None
+
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -244,14 +265,21 @@ def importar_desde_lista():
     def parsear_localidad(linea):
         LOCALIDADES_VALIDAS = [
             'Capital', 'Alvear', 'Bella Vista', 'Beron de Astrada', 'Caa Cati',
-            'Colonia Liebig', 'Concepcion', 'Curuzú Cuatiá', 'Curuzu Cuatia',
+            'Colonia Liebig', 'Concepcion', 'Curuzú Cuatiá',
             'Empedrado', 'Esquina', 'Gdor. Martinez', 'Gdor. Virasoro', 'Goya',
             'Ita Ibate', 'Itati', 'Ituzaingo', 'La Cruz', 'Loreto', 'Mburucuya',
             'Mercedes', 'Mocoreta', 'Monte Caseros', 'Paso de la Patria',
             'Paso de los Libres', 'Perugorria', 'Saladas', 'San Carlos',
             'San Cosme', 'San Luis del Palmar', 'San Miguel', 'San Roque',
-            'Santa Lucia', 'Santa Rosa', 'Santo Tome', 'Santo Tomé', 'Sauce', 'Yapeyu'
+            'Santa Lucia', 'Santa Rosa', 'Santo Tomé', 'Sauce', 'Yapeyu'
         ]
+
+        ALIAS_LOCALIDADES = {
+            "CURUZU CUATIA": "Curuzú Cuatiá",
+            "CURUZÚ CUATIÁ": "Curuzú Cuatiá",
+            "SANTO TOME": "Santo Tomé",
+            "SANTO TOMÉ": "Santo Tomé",
+        }
 
         localidad = "Capital"
         texto_expte = str(linea or "").strip()
@@ -259,12 +287,17 @@ def importar_desde_lista():
         if " - " in texto_expte:
             partes = texto_expte.rsplit(" - ", 1)
             posible_loc = partes[1].strip()
+            posible_norm = posible_loc.upper()
 
-            for loc in LOCALIDADES_VALIDAS:
-                if loc.upper() == posible_loc.upper():
-                    localidad = loc
-                    texto_expte = partes[0].strip()
-                    break
+            if posible_norm in ALIAS_LOCALIDADES:
+                localidad = ALIAS_LOCALIDADES[posible_norm]
+                texto_expte = partes[0].strip()
+            else:
+                for loc in LOCALIDADES_VALIDAS:
+                    if loc.upper() == posible_norm:
+                        localidad = loc
+                        texto_expte = partes[0].strip()
+                        break
 
         return texto_expte, localidad
 
@@ -627,8 +660,6 @@ def run_sincronizador():
         "success": True,
         "message": f"Sincronizando {pendientes} expedientes pendientes..."
     })
-    threading.Thread(target=hilo, daemon=True).start()
-    return jsonify({"success": True})
 
 @app.route('/run_sincronizador_selectivo', methods=['POST'])
 @login_required
@@ -798,7 +829,7 @@ def ejecutar_sync_con_cantidad(
 
         if modo == "seleccionados":
             query = query.filter(
-                CausaInfo.estado_sync.in_(["pendiente", "parcial"]),
+                CausaInfo.estado_sync.in_(["pendiente", "parcial", "error"]),
                 CausaInfo.numero.in_(expedientes)
             )
         else:
@@ -856,7 +887,6 @@ def run_completar_historial():
     u_id, u_name = current_user.id, current_user.username
     max_exptes = max_exptes_trial(current_user)
     # Recibir lista de expedientes si viene del actualizador
-    import json
     lista_json = request.form.get('expedientes', '')
     lista_exptes = json.loads(lista_json) if lista_json else None
     def hilo():
@@ -1205,7 +1235,6 @@ def texto_proveido():
 @login_required
 @requiere_feature('cedulas')
 def generar_cedula_route():
-    import json
     from helpers.cedulas import generar_cedula
 
     tipo = request.form.get('tipo', 'cedula_local')
@@ -1419,9 +1448,6 @@ def mi_plan():
     })
 
 # ── Watcher de carpetas ───────────────────────────────────────
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
-
 class ExpteWatcher(FileSystemEventHandler):
     def on_deleted(self, event):
         if not event.is_directory:
@@ -1445,6 +1471,10 @@ class ExpteWatcher(FileSystemEventHandler):
             pass
 
 def iniciar_watcher():
+    if Observer is None:
+        print("⚠️ Watchdog no está instalado. Watcher de expedientes desactivado.")
+        return
+
     ruta_base = os.path.join(os.getcwd(), "expedientes_clientes")
     os.makedirs(ruta_base, exist_ok=True)
     observer = Observer()
@@ -1452,6 +1482,7 @@ def iniciar_watcher():
     observer.daemon = True
     observer.start()
     print("👁️ Watcher de expedientes activo")
+
 
 iniciar_watcher()
 
@@ -1521,7 +1552,6 @@ def juzgados_ambiguos():
 @login_required
 def ejecutar_recuperar_caratulas():
     """Inicia la recuperación de carátulas con las localidades confirmadas."""
-    import json
     localidades_mapa = json.loads(request.form.get('localidades_mapa', '{}'))
     u_id   = current_user.id
     u_name = current_user.username
@@ -1539,8 +1569,12 @@ def ejecutar_recuperar_caratulas():
 def asegurar_columnas_sync():
     import sqlite3
 
-    conn = sqlite3.connect("lexview.db")
+    conn = sqlite3.connect(config.DB_PATH)
     cursor = conn.cursor()
+
+    # =====================================================
+    # CAUSA_INFO
+    # =====================================================
 
     cursor.execute("PRAGMA table_info(causa_info)")
     columnas = [c[1] for c in cursor.fetchall()]
@@ -1556,6 +1590,44 @@ def asegurar_columnas_sync():
             ALTER TABLE causa_info
             ADD COLUMN paginas_descargadas_total INTEGER DEFAULT 0
         """)
+
+    # =====================================================
+    # USUARIO
+    # =====================================================
+
+    cursor.execute("PRAGMA table_info(usuario)")
+    columnas_usuario = [c[1] for c in cursor.fetchall()]
+
+    if "max_matriculas" not in columnas_usuario:
+        cursor.execute("""
+            ALTER TABLE usuario
+            ADD COLUMN max_matriculas INTEGER DEFAULT 1
+        """)
+
+    if "max_dispositivos" not in columnas_usuario:
+        cursor.execute("""
+            ALTER TABLE usuario
+            ADD COLUMN max_dispositivos INTEGER DEFAULT 1
+        """)
+
+    # =====================================================
+    # MATRICULA_FORUM
+    # =====================================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS matricula_forum (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario_id INTEGER NOT NULL,
+            nombre VARCHAR(120),
+            matricula VARCHAR(50) NOT NULL,
+            forum_user VARCHAR(120) NOT NULL,
+            forum_pass VARCHAR(120) NOT NULL,
+            activa BOOLEAN DEFAULT 1,
+            es_principal BOOLEAN DEFAULT 0,
+            fecha_creacion DATETIME,
+            FOREIGN KEY(usuario_id) REFERENCES usuario(id)
+        )
+    """)
 
     conn.commit()
     conn.close()
