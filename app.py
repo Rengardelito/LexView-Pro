@@ -523,6 +523,7 @@ def importar_desde_lista():
 @login_required
 def dashboard():
     usuario = current_user.username
+    matriculas_forum_json = []
     hoy = date.today()
     causas_db = CausaInfo.query.filter_by(usuario_id=current_user.id).all()
     base_path = Path(os.path.join(BASE_DATOS_PDFS, usuario))

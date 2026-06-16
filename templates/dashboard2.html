@@ -715,7 +715,7 @@
     </div>
 
     <script id="data-notas" type="application/json">{{ notas_json | tojson }}</script>
-    <script id="data-matriculas" type="application/json">{{ matriculas_forum | tojson }}</script>
+    <script id="data-matriculas" type="application/json">{{ (matriculas_forum | default([])) | tojson }}</script>
     <script>
         const notasJson = JSON.parse(document.getElementById('data-notas').textContent);
         let fechaVisual = new Date();
