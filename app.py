@@ -116,7 +116,7 @@ def setup():
                 flash('Dispositivo no autorizado. Contactá al desarrollador.', 'error')
                 return render_template('setup.html')
             # Guardar plan del servidor
-            plan_servidor = data.get('plan', 'basic')
+            plan_servidor = data.get('plan', 'PRUEBA')
         except Exception:
             flash(
                 '⚠️ No se pudo verificar la licencia online. '
@@ -124,7 +124,7 @@ def setup():
                 'para validar el dispositivo.',
                 'warning'
             )
-            plan_servidor = 'basic'
+            plan_servidor = data.get('plan', 'PRUEBA')
 
         alcance = request.form.get('alcance', 'capital')
 
