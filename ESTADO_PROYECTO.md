@@ -298,3 +298,80 @@ Estado:
 
 AUTO-UPDATE FUNCIONANDO END-TO-END.
 
+# ESTADO ACTUAL DEL PROYECTO
+
+## Versión estable vigente
+
+**LEXVIEWPRO v2.3.6**
+
+Estado: **STABLE RELEASE**
+
+Fecha: 15/06/2026
+
+Commit estable:
+
+`cb7c7d9`
+
+Tag:
+
+`v2.3.6`
+
+---
+
+## Funcionalidades validadas
+
+* Importación por lista
+* Importación por Excel
+* Clasificación automática Capital / Interior
+* Detección de localidad
+* Actualización de notificaciones
+* Sincronización inteligente
+* Sincronización por cantidad (5 / 10 / Todas)
+* Modal de sincronización por camada
+* Visor PDF
+* Auditoría
+* Cédulas
+* Auto Update
+* Licencias
+* Grace period offline (10 días)
+* Gestión de matrículas
+* Selector de matrícula en actualización de notificaciones
+
+---
+
+## Cambios incorporados en v2.3.6
+
+### Licencias
+
+* Validación offline por 10 días.
+* Preparación para planes Profesional / Estudio.
+
+### Localidades
+
+* Corrección Curuzú Cuatiá.
+* Corrección búsquedas por localidad interior.
+* Corrección transferencia de localidad entre clasificación y sincronización.
+
+### Sincronización
+
+* Corrección modal persistente.
+* Corrección camada importada.
+* Corrección selección de expedientes.
+* Corrección sincronización interior.
+
+### Matrículas
+
+* Pantalla Matrículas Forum.
+* Matrícula principal protegida.
+* Matrículas adicionales según licencia.
+* Integración con Actualizar Notificaciones.
+
+---
+
+## Punto de retorno estable
+
+Si una versión futura presenta problemas, volver a:
+
+Tag: `v2.3.6`
+
+Commit: `cb7c7d9`
