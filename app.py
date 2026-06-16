@@ -10,7 +10,7 @@ from pathlib import Path
 
 import config
 from config import BASE_DATOS_PDFS, CARPETA_HOTFOLDER, OUTPUT_STATIC
-from database.models import CausaInfo, NotaPersonal, Usuario, Vencimiento, db
+from database.models import db, Usuario, CausaInfo, Vencimiento, NotaPersonal, MatriculaForum
 from flask import (
     Flask,
     flash,
@@ -223,6 +223,88 @@ def seleccionar_carpeta():
     if carpeta and os.path.isdir(carpeta):
         return jsonify({"success": True, "ruta": carpeta})
     return jsonify({"success": False, "message": "Ruta inválida o no encontrada"})
+
+
+# ============================================================
+# MATRÍCULAS FORUM
+# ============================================================
+@app.route('/matriculas', methods=['GET'])
+@login_required
+def matriculas():
+    matriculas_db = MatriculaForum.query.filter_by(
+        usuario_id=current_user.id
+    ).order_by(MatriculaForum.es_principal.desc(), MatriculaForum.id.asc()).all()
+
+    principal_cargada = 1 if current_user.matricula else 0
+    adicionales_activas = len([m for m in matriculas_db if m.activa])
+    usadas = principal_cargada + adicionales_activas
+    max_matriculas = current_user.max_matriculas or 1
+
+    return render_template(
+    'matriculas.html',
+    matriculas=matriculas_db,
+    usadas=usadas,
+    max_matriculas=max_matriculas,
+    matricula_principal=current_user.matricula
+)
+
+
+@app.route('/matriculas/agregar', methods=['POST'])
+@login_required
+def agregar_matricula():
+
+    principal_cargada = 1 if current_user.matricula else 0
+
+    adicionales_activas = MatriculaForum.query.filter_by(
+        usuario_id=current_user.id,
+        activa=True
+    ).count()
+
+    activas = principal_cargada + adicionales_activas
+
+    max_matriculas = current_user.max_matriculas or 1
+
+    if activas >= max_matriculas:
+        flash('Tu plan no permite agregar más matrículas.', 'error')
+        return redirect(url_for('matriculas'))
+
+    nombre = request.form.get('nombre', '').strip()
+    matricula = request.form.get('matricula', '').strip()
+
+    if not matricula:
+        flash('Completá la matrícula.', 'error')
+        return redirect(url_for('matriculas'))
+
+    nueva = MatriculaForum(
+        usuario_id=current_user.id,
+        nombre=nombre,
+        matricula=matricula,
+        activa=True,
+        es_principal=False
+    )
+
+    db.session.add(nueva)
+    db.session.commit()
+
+    flash('Matrícula agregada correctamente.', 'success')
+    return redirect(url_for('matriculas'))
+
+
+@app.route('/matriculas/eliminar/<int:id>', methods=['POST'])
+@login_required
+def eliminar_matricula(id):
+    mat = MatriculaForum.query.filter_by(
+        id=id,
+        usuario_id=current_user.id
+    ).first_or_404()
+
+    db.session.delete(mat)
+    db.session.commit()
+
+    flash('Matrícula eliminada.', 'success')
+    return redirect(url_for('matriculas'))
+
+
 
 
 # ============================================================
@@ -505,14 +587,33 @@ def dashboard():
         f = v.fecha.isoformat()
         notas_json.setdefault(f, []).append({'tipo': 'vencimiento', 'texto': v.titulo})
 
-    return render_template('dashboard2.html',
-                           usuario=usuario,
-                           causas=causas_db,
-                           estructura=estructura_carpetas,
-                           notas_db=notas_db,
-                           vencimientos_db=vencimientos_db,
-                           notas_json=notas_json,
-                           plan=get_plan(current_user))
+    matriculas_forum_db = MatriculaForum.query.filter_by(
+        usuario_id=current_user.id,
+        activa=True
+    ).order_by(MatriculaForum.id.asc()).all()
+
+    matriculas_forum_json = [
+        {
+            "id": m.id,
+            "nombre": m.nombre or "",
+            "matricula": m.matricula or ""
+        }
+        for m in matriculas_forum_db
+    ]
+
+
+    return render_template(
+        'dashboard2.html',
+        usuario=usuario,
+        causas=causas_db,
+        estructura=estructura_carpetas,
+        notas_db=notas_db,
+        vencimientos_db=vencimientos_db,
+        notas_json=notas_json,
+        plan=get_plan(current_user),
+        matricula_principal=current_user.matricula,
+        matriculas_forum=matriculas_forum_json
+    )
 
 
 # ============================================================

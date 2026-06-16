@@ -485,6 +485,13 @@
                     <span class="action-dot dot-pink"></span>
                 </button>
                 
+                <button class="action-item" onclick="window.location.href='/matriculas'">
+                    <span>
+                        <strong>⚖️ Matrículas Forum</strong>
+                        <small>Administrar matrículas habilitadas por licencia</small>
+                    </span>
+                    <span class="action-dot dot-teal"></span>
+                </button>
             </div>
         </div>
 
@@ -708,9 +715,15 @@
     </div>
 
     <script id="data-notas" type="application/json">{{ notas_json | tojson }}</script>
+    <script id="data-matriculas" type="application/json">{{ matriculas_forum | tojson }}</script>
     <script>
         const notasJson = JSON.parse(document.getElementById('data-notas').textContent);
         let fechaVisual = new Date();
+        const MATRICULA_PRINCIPAL = "{{ matricula_principal or '' }}";
+        const MATRICULAS_FORUM =
+            JSON.parse(
+                document.getElementById('data-matriculas').textContent
+            );
         let vistaActual = 'tarjetas';
         let panelCardActual = null;
         var socket = io();
@@ -1385,45 +1398,53 @@ socket.on('bot_finished', function() {
                 ? '<span style="color:#ffab00;">⚠️ MODO TRIAL — máximo 5 expedientes</span>'
                 : '¿Querés usar una fecha diferente?';
             
+            var opcionesMatriculaHtml = '';
+
+            opcionesMatriculaHtml +=
+                '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
+                    '<input type="radio" name="mat-opt" class="mat-radio" value="'+MATRICULA_PRINCIPAL+'" checked style="margin-top:3px;">' +
+                    '<label style="font-size:0.72rem;color:var(--text-bright);cursor:pointer;flex:1;">Matrícula principal <span style="color:var(--blue);font-family:var(--mono);">'+(MATRICULA_PRINCIPAL || '(sin matrícula)')+'</span></label>' +
+                '</div>';
+
+            MATRICULAS_FORUM.forEach(function(m) {
+                opcionesMatriculaHtml +=
+                    '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
+                        '<input type="radio" name="mat-opt" class="mat-radio" value="'+m.matricula+'" style="margin-top:3px;">' +
+                        '<label style="font-size:0.72rem;color:var(--text-bright);cursor:pointer;flex:1;">'+(m.nombre || 'Matrícula adicional')+' <span style="color:var(--blue);font-family:var(--mono);">'+m.matricula+'</span></label>' +
+                    '</div>';
+            });
+
             modal.innerHTML =
-                '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:28px;width:380px;font-family:var(--mono);">' +
+                '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:28px;width:420px;font-family:var(--mono);">' +
                 '<div style="color:var(--blue);font-size:0.85rem;font-weight:700;margin-bottom:6px;">🔔 ACTUALIZAR NOTIFICACIONES</div>' +
                 '<div style="color:var(--text);font-size:0.72rem;margin-bottom:20px;line-height:1.6;">'+subtitulo+'</div>' +
                 fechaHtml +
-                '<label style="font-size:0.62rem;color:var(--text);letter-spacing:1px;display:block;margin-bottom:5px;">MATRÍCULA</label>' +
-                '<div style="display:flex;gap:8px;margin-bottom:20px;">' +
-                '<input type="radio" name="mat-opt" id="mat-default" value="default" checked style="margin-top:3px;">' +
-                '<label for="mat-default" style="font-size:0.72rem;color:var(--text-bright);cursor:pointer;flex:1;">Usar matrícula del perfil <span id="mat-label" style="color:var(--blue);font-family:var(--mono);">...</span></label>' +
-                '</div>' +
-                '<div style="display:flex;gap:8px;margin-bottom:20px;">' +
-                '<input type="radio" name="mat-opt" id="mat-custom" value="custom" style="margin-top:3px;">' +
-                '<label for="mat-custom" style="font-size:0.72rem;color:var(--text-bright);cursor:pointer;">Otra matrícula:</label>' +
-                '<input type="text" id="mat-custom-val" placeholder="ej: 3232" style="flex:1;background:var(--bg);border:1px solid var(--border2);color:var(--text-bright);border-radius:5px;padding:4px 8px;font-size:0.78rem;font-family:var(--mono);outline:none;" onclick="document.getElementById(\'mat-custom\').checked=true;">' +
-                '</div>' +
-                '<div style="display:flex;gap:10px;">' +
+                '<label style="font-size:0.62rem;color:var(--text);letter-spacing:1px;display:block;margin-bottom:8px;">MATRÍCULA</label>' +
+                opcionesMatriculaHtml +
+                '<div style="display:flex;gap:10px;margin-top:20px;">' +
                 '<button onclick="document.body.removeChild(document.getElementById(\'modal-actualizador\'))" style="flex:1;padding:9px;background:transparent;border:1px solid var(--border2);color:var(--text);border-radius:5px;cursor:pointer;font-size:0.75rem;font-family:var(--mono);">CANCELAR</button>' +
                 '<button id="modal-btn-confirmar" style="flex:2;padding:9px;background:var(--blue);border:none;color:#fff;border-radius:5px;cursor:pointer;font-size:0.75rem;font-weight:700;font-family:var(--mono);">BUSCAR NOTIFICACIONES</button>' +
                 '</div></div>';
-            
-            document.body.appendChild(modal);
 
-            // Cargar matrícula del perfil
-            fetch('/api/mi_matricula').then(r=>r.json()).then(d=>{
-                document.getElementById('mat-label').textContent = d.matricula || '(sin matrícula)';
-            });
+            document.body.appendChild(modal);
 
             document.getElementById('modal-btn-confirmar').onclick = function() {
                 var fechaInput = document.getElementById('modal-fecha-notif');
                 var fecha = (esTrial || !fechaInput) ? hoy : fechaInput.value;
-                var usaCustom = document.getElementById('mat-custom').checked;
-                var matriculaCustom = document.getElementById('mat-custom-val').value.trim();
+
+                var radioSeleccionado = document.querySelector('input[name="mat-opt"]:checked');
+                var matriculaSeleccionada = radioSeleccionado ? radioSeleccionado.value : MATRICULA_PRINCIPAL;
+
                 document.body.removeChild(document.getElementById('modal-actualizador'));
                 document.getElementById('monitor-proceso').style.display = 'block';
+
                 var fd = new FormData();
                 fd.append('fecha', fecha);
-                if (usaCustom && matriculaCustom) {
-                    fd.append('matricula_override', matriculaCustom);
+
+                if (matriculaSeleccionada) {
+                    fd.append('matricula_override', matriculaSeleccionada);
                 }
+
                 fetch('/run_actualizador', {method:'POST', body:fd});
             };
         }

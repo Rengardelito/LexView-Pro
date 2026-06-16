@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Matrículas Forum</title>
+
+<style>
+body{
+    background:#0a0f18;
+    color:#fff;
+    font-family:Consolas, monospace;
+    padding:30px;
+}
+
+.card{
+    background:#111827;
+    border:1px solid #243041;
+    border-radius:10px;
+    padding:20px;
+    margin-bottom:20px;
+}
+
+input{
+    width:100%;
+    padding:10px;
+    margin-top:5px;
+    margin-bottom:12px;
+    background:#0b1220;
+    border:1px solid #243041;
+    color:white;
+    border-radius:6px;
+}
+
+button{
+    padding:10px 16px;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+.btn{
+    background:#2563eb;
+    color:white;
+}
+
+.btn-delete{
+    background:#dc2626;
+    color:white;
+}
+
+h1{
+    color:#00d4ff;
+}
+
+.badge{
+    display:inline-block;
+    padding:4px 8px;
+    background:#0ea5e9;
+    border-radius:5px;
+    font-size:12px;
+}
+
+.item{
+    border-bottom:1px solid #243041;
+    padding:10px 0;
+}
+</style>
+
+</head>
+<body>
+
+<h1>⚖️ Matrículas Forum</h1>
+
+<div class="card">
+    <h3>
+        Cupos utilizados:
+        <span class="badge">
+            {{ usadas }} / {{ max_matriculas }}
+        </span>
+    </h3>
+</div>
+
+<div class="card">
+    <h2>Matrícula principal</h2>
+
+    <div style="font-size:1.2rem;color:#00d4ff;font-weight:bold;">
+        {{ matricula_principal or 'Sin matrícula principal cargada' }}
+    </div>
+
+    <div style="margin-top:8px;color:#999;">
+        Matrícula incluida en tu licencia. No se modifica desde esta pantalla.
+    </div>
+</div>
+
+<div class="card">
+
+    <h2>Agregar matrícula adicional</h2>
+
+    {% if usadas >= max_matriculas %}
+        <p style="color:#ffab00;">
+            Ya utilizaste todos los cupos disponibles de tu plan.
+        </p>
+    {% else %}
+
+        <form method="POST" action="{{ url_for('agregar_matricula') }}">
+
+            <label>Nombre</label>
+            <input type="text" name="nombre" placeholder="Ej: Dra. Gómez">
+
+            <label>Matrícula</label>
+            <input type="text" name="matricula" placeholder="Ej: 4128">
+
+            <button class="btn" type="submit">
+                Agregar matrícula
+            </button>
+
+        </form>
+
+    {% endif %}
+
+</div>
+
+<div class="card">
+
+    <h2>Matrículas adicionales cargadas</h2>
+
+    {% if matriculas %}
+
+        {% for m in matriculas %}
+
+            <div class="item">
+
+                <strong>{{ m.nombre or 'Sin nombre' }}</strong><br>
+
+                Matrícula:
+                {{ m.matricula }}
+
+                <form
+                    method="POST"
+                    action="{{ url_for('eliminar_matricula', id=m.id) }}"
+                    style="margin-top:10px;"
+                    onsubmit="return confirm('¿Eliminar esta matrícula adicional?');"
+                >
+                    <button class="btn-delete">
+                        Eliminar
+                    </button>
+                </form>
+
+            </div>
+
+        {% endfor %}
+
+    {% else %}
+
+        <p style="color:#999;">
+            Todavía no hay matrículas adicionales cargadas.
+        </p>
+
+    {% endif %}
+
+</div>
+
+</body>
+</html>
