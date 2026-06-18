@@ -392,6 +392,8 @@
             color: var(--text-bright);
             border-color: var(--blue);
         }
+
+        
     </style>
 </head>
 <body>
@@ -455,7 +457,13 @@
                     <span><strong>🔔 Actualizar notificaciones</strong><small>Busca movimientos por fecha y matrícula</small></span>
                     <span class="action-dot dot-teal"></span>
                 </button>
-
+                <button class="action-item" onclick="cerrarAccionesMenu(); limpiarErrores();">
+                    <span>
+                        <strong>🧹 Limpiar errores</strong>
+                        <small>Elimina expedientes marcados como ERROR</small>
+                    </span>
+                    <span class="action-dot dot-pink"></span>
+                </button>
                 <button class="action-item" onclick="cerrarAccionesMenu(); abrirModalRecuperarCaratulas();">
                     <span><strong>🏷️ Recuperar carátulas</strong><small>Completa carátulas faltantes o ambiguas</small></span>
                     <span class="action-dot dot-violet"></span>
@@ -1461,7 +1469,7 @@ socket.on('bot_finished', function() {
     }
 }
 
-        function iniciarAuditoria() {
+       function iniciarAuditoria() {
             var modal = document.createElement('div');
             modal.id = 'modal-auditoria';
             modal.style.cssText =
@@ -1492,19 +1500,19 @@ socket.on('bot_finished', function() {
                         '<label style="font-size:0.62rem;color:var(--text-dim);letter-spacing:1px;display:block;margin-bottom:8px;">CANTIDAD A DESCARGAR</label>' +
                         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
 
-                            '<button onclick="confirmarSyncCantidad(\'todos\', 5, this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
+                            '<button onclick="confirmarAuditoriaCantidad(5)" class="btn-modal-sync">' +
                                 'Últimas 5' +
                             '</button>' +
 
-                            '<button onclick="confirmarSyncCantidad(\'todos\', 10, this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
+                            '<button onclick="confirmarAuditoriaCantidad(10)" class="btn-modal-sync">' +
                                 'Últimas 10' +
                             '</button>' +
 
-                            '<button onclick="confirmarSyncCantidad(\'todos\', \'todas\', this)" class="btn-modal-sync btn-sync-cantidad-opcion">' +
+                            '<button onclick="confirmarAuditoriaCantidad(\'todas\')" class="btn-modal-sync">' +
                                 'Todas' +
                             '</button>' +
 
-                            '<button onclick="cerrarModalCamada()" class="btn-modal-sync btn-sec">' +
+                            '<button onclick="cerrarModalAuditoria()" class="btn-modal-sync btn-sec">' +
                                 'Elegir después' +
                             '</button>' +
 
@@ -1803,6 +1811,45 @@ socket.on('bot_finished', function() {
 
 function cerrarModalCaratulas() {
     document.getElementById('modal-caratulas-overlay').style.display = 'none';
+}
+async function limpiarErrores() {
+    if (!confirm("¿Eliminar todos los expedientes con ERROR?")) {
+        return;
+    }
+
+    try {
+        const resp = await fetch("/limpiar_errores", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                "Accept": "application/json",
+                "X-Requested-With": "XMLHttpRequest"
+            }
+        });
+
+        const text = await resp.text();
+
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            alert("La sesión no está activa o el servidor devolvió HTML. Cerrá sesión, volvé a entrar y probá de nuevo.");
+            return;
+        }
+
+        if (data.ok || data.success) {
+            alert(
+                "Errores eliminados: " + (data.eliminadas || 0) +
+                "\nCarpetas vacías eliminadas: " + (data.carpetas_eliminadas || 0)
+            );
+            location.reload();
+        } else {
+            alert(data.message || "No se pudieron limpiar los errores.");
+        }
+
+    } catch (err) {
+        alert("Error llamando a /limpiar_errores: " + err);
+    }
 }
 
 async function confirmarRecuperarCaratulas() {

@@ -1103,7 +1103,53 @@ def run_auditoria():
 
     return jsonify({"success": True})
 
+@app.route('/limpiar_errores', methods=['POST'])
+@login_required
+def limpiar_errores():
+    errores = CausaInfo.query.filter_by(
+        usuario_id=current_user.id,
+        estado_sync="error"
+    ).all()
 
+    eliminadas = 0
+    carpetas_eliminadas = 0
+
+    base_usuario = os.path.join(
+        "expedientes_clientes",
+        current_user.username
+    )
+
+    for causa in errores:
+        numero = causa.numero
+        carpetas_candidatas = []
+
+        if numero and os.path.isdir(base_usuario):
+            for raiz, dirs, files in os.walk(base_usuario):
+                for d in dirs:
+                    if d == numero:
+                        carpetas_candidatas.append(os.path.join(raiz, d))
+
+        for carpeta in carpetas_candidatas:
+            try:
+                if os.path.isdir(carpeta) and not os.listdir(carpeta):
+                    os.rmdir(carpeta)
+                    carpetas_eliminadas += 1
+                    print(f"🧹 Carpeta vacía eliminada: {carpeta}")
+                else:
+                    print(f"⚠️ Carpeta no vacía, no se elimina: {carpeta}")
+            except Exception as e:
+                print(f"⚠️ Error eliminando carpeta {carpeta}: {e}")
+
+        db.session.delete(causa)
+        eliminadas += 1
+
+    db.session.commit()
+
+    return jsonify({
+        "ok": True,
+        "eliminadas": eliminadas,
+        "carpetas_eliminadas": carpetas_eliminadas
+    })
 # ============================================================
 # VISOR
 # ============================================================

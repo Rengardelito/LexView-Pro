@@ -151,11 +151,7 @@ def _buscar_causa(usuario_id, tipo, nro, anio, nro_completo):
             CausaInfo.numero == nro_completo
         ).first()
 
-    if not causa:
-        causa = CausaInfo.query.filter(
-            CausaInfo.usuario_id == usuario_id,
-            CausaInfo.numero.contains(nro)
-        ).first()
+    
 
     return causa
 
@@ -170,6 +166,59 @@ def ejecutar_auditoria(usuario_id, usuario_nombre, socketio, app, lista_texto, c
         })
         socketio.emit('bot_finished', {})
         return
+
+    def marcar_error_auditoria(nro_completo, tipo_code, nro_solo, anio, localidad, causa_id=None):
+        with app.app_context():
+            causa_db = db.session.get(CausaInfo, causa_id) if causa_id else None
+
+            if not causa_db:
+                causa_db = _buscar_causa(
+                    usuario_id,
+                    tipo_code,
+                    nro_solo,
+                    anio,
+                    nro_completo
+                )
+
+            if not causa_db:
+                causa_db = CausaInfo(
+                    numero=nro_completo,
+                    tipo=tipo_code,
+                    numero_base=nro_solo,
+                    anio=anio,
+                    juzgado="SIN JUZGADO",
+                    secretaria="SECRETARIA UNICA",
+                    demandado="NO ENCONTRADO EN FORUM",
+                    estado="Error",
+                    usuario_id=usuario_id,
+                    localidad=localidad
+                )
+                db.session.add(causa_db)
+
+            causa_db.estado_sync = "error"
+            causa_db.necesita_sync = True
+            causa_db.error_sync = "No encontrado en Forum. Verificar número, año, tipo o localidad."
+            causa_db.ultima_sync = datetime.utcnow()
+
+            db.session.commit()
+            return causa_db.id
+
+    def extraer_anio_forum(datos):
+        if not datos:
+            return ""
+
+        anio_forum = str(datos.get("anio") or "").strip()
+        if anio_forum:
+            return anio_forum
+
+        nro_forum = str(datos.get("nro_completo") or "").strip()
+        nro_forum = nro_forum.replace("/", "-").upper()
+
+        partes = nro_forum.split("-")
+        if len(partes) >= 2:
+            return partes[-1].strip()
+
+        return ""
 
     with app.app_context():
         usuario = db.session.get(Usuario, usuario_id)
@@ -216,7 +265,7 @@ def ejecutar_auditoria(usuario_id, usuario_nombre, socketio, app, lista_texto, c
         for idx, exp in enumerate(expedientes):
             nro_completo = exp["nro_completo"]
             nro_solo = exp["nro"]
-            anio = exp.get("anio", "")
+            anio = str(exp.get("anio", "")).strip()
             tipo_code = exp["tipo"]
             localidad = exp.get("localidad", "Capital")
 
@@ -250,9 +299,36 @@ def ejecutar_auditoria(usuario_id, usuario_nombre, socketio, app, lista_texto, c
                 )
 
                 if not datos:
+                    marcar_error_auditoria(
+                        nro_completo,
+                        tipo_code,
+                        nro_solo,
+                        anio,
+                        localidad
+                    )
+
                     socketio.emit('bot_status', {
-                        'msg': f'⚠️ {label}: no encontrado en Forum, saltando...'
+                        'msg': f'❌ {label}: no encontrado en Forum. Quedó marcado como ERROR para poder reintentar.'
                     })
+
+                    no_encontrados += 1
+                    continue
+
+                anio_forum = extraer_anio_forum(datos)
+
+                if anio and anio_forum and anio_forum != anio:
+                    marcar_error_auditoria(
+                        nro_completo,
+                        tipo_code,
+                        nro_solo,
+                        anio,
+                        localidad
+                    )
+
+                    socketio.emit('bot_status', {
+                        'msg': f'❌ {label}: Forum encontró año {anio_forum}, pero se pidió año {anio}. Marcado como ERROR.'
+                    })
+
                     no_encontrados += 1
                     continue
 
@@ -261,20 +337,6 @@ def ejecutar_auditoria(usuario_id, usuario_nombre, socketio, app, lista_texto, c
                 caratula = datos.get('caratula') or 'SIN CARATULAR'
 
                 tipo_final = (datos.get('tipo') or tipo_code or "").strip().upper()
-                nro_forum = datos.get('nro_completo') or nro_completo
-
-                # Normalizamos por si Forum devuelve EXP-118897-15
-                texto_forum = str(nro_forum).replace("/", "-").upper()
-                m = re.match(
-                    r"^([A-Z]{1,4}\d{0,3})[\s\-]+(\d{3,8})[\s\-]+(\d{1,4})$",
-                    texto_forum
-                )
-
-                if m:
-                    tipo_final = tipo_final or m.group(1)
-                    nro_solo = m.group(2)
-                    anio = m.group(3)
-                    nro_completo = f"{nro_solo}-{anio}"
 
                 ruta = os.path.join(
                     "expedientes_clientes",
@@ -296,6 +358,7 @@ def ejecutar_auditoria(usuario_id, usuario_nombre, socketio, app, lista_texto, c
                         demandado=caratula,
                         estado="En Trámite",
                         usuario_id=usuario_id,
+                        localidad=localidad,
                         necesita_sync=True,
                         estado_sync="pendiente"
                     )
@@ -313,16 +376,6 @@ def ejecutar_auditoria(usuario_id, usuario_nombre, socketio, app, lista_texto, c
                 juzgado = causa.juzgado or "SIN JUZGADO"
                 secretaria = causa.secretaria or "SECRETARIA UNICA"
 
-                if causa.tipo:
-                    tipo_code = causa.tipo
-
-                if causa.numero_base:
-                    nro_solo = causa.numero_base
-
-                if causa.anio:
-                    anio = causa.anio
-                    nro_completo = f"{nro_solo}-{anio}"
-
                 ruta = os.path.join(
                     "expedientes_clientes",
                     usuario_nombre,
@@ -338,9 +391,19 @@ def ejecutar_auditoria(usuario_id, usuario_nombre, socketio, app, lista_texto, c
                 tipo_codigo=tipo_code or None,
                 localidad=localidad
             ):
+                marcar_error_auditoria(
+                    nro_completo,
+                    tipo_code,
+                    nro_solo,
+                    anio,
+                    localidad,
+                    causa_id=causa_id
+                )
+
                 socketio.emit('bot_status', {
-                    'msg': f'⚠️ {label}: no se pudo entrar, saltando...'
+                    'msg': f'❌ {label}: no se pudo entrar en Forum. Quedó marcado como ERROR para reintentar.'
                 })
+
                 no_encontrados += 1
                 continue
 

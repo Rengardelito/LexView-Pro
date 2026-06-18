@@ -1,4 +1,4 @@
-from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
+﻿from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 # bots/forum_driver.py
 import time as t_mod
 import time
@@ -471,7 +471,10 @@ def descargar_pdfs_nuevos(driver, ruta_local, temp_download_path):
             elif len(celdas) > 2:
                 tipo_str = celdas[2].text.strip()[:50]
 
-            nombre_check = f"{fecha_iso} - {tipo_str}".replace("/", "_").replace(":", "").replace("\\", "").strip()
+            # Limpiar caracteres inválidos para nombres de archivo en Windows
+            tipo_str = re.sub(r'[\\/*?:"<>|]', "_", tipo_str).strip()
+
+            nombre_check = f"{fecha_iso} - {tipo_str}".strip()
 
             if nombre_check in archivos_locales:
                 print(f"⏩ Ya existe: {nombre_check}")
@@ -487,13 +490,7 @@ def descargar_pdfs_nuevos(driver, ruta_local, temp_download_path):
                 pass
 
             base_nombre = f"{fecha_iso} - {tipo_str}"
-            base_nombre = (
-                base_nombre
-                .replace("/", "_")
-                .replace(":", "")
-                .replace("\\", "")
-                .strip()
-            )
+            base_nombre = re.sub(r'[\\/*?:"<>|]', "_", base_nombre).strip()
 
             if numero_id:
                 nombre_final = f"{base_nombre}_{numero_id}.pdf"
@@ -888,6 +885,17 @@ def sincronizar_pdfs(
 
             try:
                 celdas = fila.find_elements(By.TAG_NAME, "td")
+                print("─" * 60)
+                print(f"[DEBUG FILA {idx_fila + 1}]")
+                for i, c in enumerate(celdas):
+                    print(f"  TD[{i}] = {c.text.strip()!r}")
+
+                try:
+                    links = fila.find_elements(By.XPATH, ".//a")
+                    print(f"  LINKS = {len(links)}")
+                except Exception as e:
+                    print(f"  LINKS ERROR = {e}")
+                print("─" * 60)
 
                 if len(celdas) < 3:
                     idx_fila += 1

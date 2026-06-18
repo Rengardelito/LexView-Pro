@@ -375,3 +375,13 @@ Si una versión futura presenta problemas, volver a:
 Tag: `v2.3.6`
 
 Commit: `cb7c7d9`
+
+16/06/2026
+
+VALIDADO:
+- Auto-update completo
+- VPS licencias
+- GitHub Releases
+- Matrículas múltiples
+- Dashboard actualizado
+- Salto de versiones funcionando

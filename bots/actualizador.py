@@ -707,7 +707,7 @@ def actualizar_estado_desde_tabla(driver, causa_id, app, socketio, fecha_notif=N
 
 def _entrar_a_expediente_actualizador(driver, nro_expte, tipo_codigo=None, localidad='Capital'):
     nro_solo = nro_expte.split('-')[0]
-    anio     = nro_expte.split('-')[1] if '-' in nro_expte else ""
+    anio = nro_expte.split('-')[1] if '-' in nro_expte else ""
     tipo_normalizado = tipo_codigo.upper().replace(" ", "") if tipo_codigo else None
 
     driver.get(config.FORUM_URL_CAUSAS)
@@ -730,14 +730,17 @@ def _entrar_a_expediente_actualizador(driver, nro_expte, tipo_codigo=None, local
         )).click()
 
     wait.until(EC.element_to_be_clickable(
-    (By.XPATH, f"//span[contains(text(), '{localidad}')]")
+        (By.XPATH, f"//span[contains(text(), '{localidad}')]")
     )).click()
+
     input_nro = wait.until(EC.element_to_be_clickable((By.ID, "vCAUSANRO")))
     input_nro.clear()
     input_nro.send_keys(nro_solo)
+
     driver.find_element(By.ID, "BTN_SEARCH").click()
 
     pagina = 1
+
     while True:
         wait.until(EC.presence_of_element_located(
             (By.XPATH, "//table[contains(@class,'Grid')]//tbody/tr")
@@ -748,6 +751,9 @@ def _entrar_a_expediente_actualizador(driver, nro_expte, tipo_codigo=None, local
             By.XPATH, "//table[contains(@class,'Grid')]//tbody/tr"
         )
 
+        hubo_mismo_numero = False
+        hubo_mismo_numero_distinto_anio_o_tipo = False
+
         for fila in filas:
             try:
                 celdas = fila.find_elements(By.TAG_NAME, "td")
@@ -755,22 +761,31 @@ def _entrar_a_expediente_actualizador(driver, nro_expte, tipo_codigo=None, local
                     continue
 
                 tipo_fila = celdas[1].text.strip().upper().replace(" ", "")
-                nro_fila  = celdas[2].text.strip()
+                nro_fila = celdas[2].text.strip()
                 anio_fila = celdas[3].text.strip()
-                 # ── DEBUG ──────────────────────────────────────────────
-                print(f"[DEBUG FILA] tipo={tipo_fila!r} nro={nro_fila!r} anio={anio_fila!r} | buscando tipo={tipo_normalizado!r} nro={nro_solo!r} anio={anio!r}")
-                # ───────────────────────────────────────────────────────
+
+                print(
+                    f"[DEBUG FILA] tipo={tipo_fila!r} nro={nro_fila!r} anio={anio_fila!r} | "
+                    f"buscando tipo={tipo_normalizado!r} nro={nro_solo!r} anio={anio!r}"
+                )
 
                 if nro_fila != nro_solo:
                     continue
+
+                hubo_mismo_numero = True
+
                 if anio and anio_fila != anio:
+                    hubo_mismo_numero_distinto_anio_o_tipo = True
                     continue
+
                 if tipo_normalizado and tipo_fila != tipo_normalizado:
+                    hubo_mismo_numero_distinto_anio_o_tipo = True
                     continue
 
                 celda_nro = celdas[2]
                 driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});", celda_nro
+                    "arguments[0].scrollIntoView({block:'center'});",
+                    celda_nro
                 )
                 time.sleep(0.3)
                 ActionChains(driver).double_click(celda_nro).perform()
@@ -778,12 +793,21 @@ def _entrar_a_expediente_actualizador(driver, nro_expte, tipo_codigo=None, local
                 WebDriverWait(driver, 15).until(
                     EC.presence_of_element_located((By.XPATH, "//table//tbody/tr"))
                 )
+
                 return True
 
             except Exception:
                 continue
 
+        if hubo_mismo_numero and hubo_mismo_numero_distinto_anio_o_tipo:
+            print(
+                f"❌ Encontré nro={nro_solo}, pero no coincide tipo/año. "
+                f"Buscado tipo={tipo_normalizado} año={anio}. No se pagina más."
+            )
+            return False
+
         print(f"🔄 entrar_actualizador: no encontrado en página {pagina}, paginando...")
+
         try:
             btn_sig = driver.find_element(
                 By.XPATH,
@@ -946,6 +970,7 @@ def ejecutar_actualizacion(usuario_id, usuario_nombre, socketio, app, fecha_str=
             juzgado_forum    = exp["juzgado"]
             secretaria_forum = exp["secretaria"]
             progreso = int(((idx + 1) / total) * 65) + 30
+           
 
             # ── DEBUG ────────────────────────────────────────────────────────
             print(f"[DEBUG EXP] tipo={tipo_code!r} nro={nro!r} nro_solo={nro_solo!r} localidad={exp.get('localidad')!r} juzgado={juzgado_forum!r}")
