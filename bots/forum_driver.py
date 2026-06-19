@@ -169,6 +169,12 @@ def buscar_expediente(driver, nro_solo, tipo_codigo=None, localidad='Capital'):
                     anio_fila = celdas[3].text.strip()
                     caratula = celdas[4].text.strip()
 
+                    print(f"[DEBUG ORGANISMO] {organismo!r}")
+                    print(
+                        f"[DEBUG BUSQUEDA] organismo={organismo!r} "
+                        f"tipo={tipo_fila!r} nro={nro_fila!r} anio={anio_fila!r}"
+)
+
                     if nro_fila != nro_limpio:
                         continue
 

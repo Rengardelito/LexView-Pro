@@ -238,7 +238,10 @@ def matriculas():
     principal_cargada = 1 if current_user.matricula else 0
     adicionales_activas = len([m for m in matriculas_db if m.activa])
     usadas = principal_cargada + adicionales_activas
-    max_matriculas = current_user.max_matriculas or 1
+    if (current_user.plan or '').lower() == 'dev':
+        max_matriculas = 99
+    else:
+        max_matriculas = current_user.max_matriculas or 1
 
     return render_template(
     'matriculas.html',
@@ -248,6 +251,16 @@ def matriculas():
     matricula_principal=current_user.matricula
 )
 
+@app.route('/matriculas/principal', methods=['POST'])
+@login_required
+def actualizar_matricula_principal():
+    matricula = request.form.get('matricula_principal', '').strip()
+
+    current_user.matricula = matricula
+    db.session.commit()
+
+    flash('Matrícula principal actualizada.', 'success')
+    return redirect(url_for('matriculas'))
 
 @app.route('/matriculas/agregar', methods=['POST'])
 @login_required
@@ -262,7 +275,10 @@ def agregar_matricula():
 
     activas = principal_cargada + adicionales_activas
 
-    max_matriculas = current_user.max_matriculas or 1
+    if (current_user.plan or '').lower() == 'dev':
+        max_matriculas = 99
+    else:
+        max_matriculas = current_user.max_matriculas or 1
 
     if activas >= max_matriculas:
         flash('Tu plan no permite agregar más matrículas.', 'error')
@@ -276,12 +292,14 @@ def agregar_matricula():
         return redirect(url_for('matriculas'))
 
     nueva = MatriculaForum(
-        usuario_id=current_user.id,
-        nombre=nombre,
-        matricula=matricula,
-        activa=True,
-        es_principal=False
-    )
+    usuario_id=current_user.id,
+    nombre=nombre,
+    matricula=matricula,
+    forum_user=current_user.forum_user or "",
+    forum_pass=current_user.forum_pass or "",
+    activa=True,
+    es_principal=False
+)
 
     db.session.add(nueva)
     db.session.commit()
@@ -616,7 +634,44 @@ def dashboard():
         matriculas_forum=matriculas_forum_json
     )
 
+@app.route('/ultima_ejecucion')
+@login_required
+def ultima_ejecucion():
 
+    ruta = os.path.join(
+        config.RESUMEN_DIARIO_PATH,
+        "ultima_ejecucion.txt"
+    )
+
+    if not os.path.exists(ruta):
+        return "<h3>No existe reporte de última ejecución</h3>"
+
+    with open(ruta, "r", encoding="utf-8") as f:
+        contenido = f.read()
+
+    return f"""
+    <html>
+    <head>
+        <title>Última ejecución</title>
+        <style>
+            body {{
+                background:#0b1017;
+                color:#dce3ea;
+                font-family: Consolas, monospace;
+                padding:20px;
+            }}
+            pre {{
+                white-space: pre-wrap;
+                font-size:14px;
+            }}
+        </style>
+    </head>
+    <body>
+        <h2>📊 Última ejecución</h2>
+        <pre>{contenido}</pre>
+    </body>
+    </html>
+    """
 # ============================================================
 # NOTAS Y VENCIMIENTOS
 # ============================================================
