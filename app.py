@@ -228,6 +228,20 @@ def seleccionar_carpeta():
 # ============================================================
 # MATRÍCULAS FORUM
 # ============================================================
+def obtener_max_matriculas_usuario(usuario):
+    plan = (usuario.plan or "").lower()
+
+    if plan == "dev":
+        return 99
+
+    if plan == "estudio":
+        return 3
+
+    if plan == "profesional":
+        return 1
+
+    return usuario.max_matriculas or 1
+
 @app.route('/matriculas', methods=['GET'])
 @login_required
 def matriculas():
@@ -241,7 +255,7 @@ def matriculas():
     if (current_user.plan or '').lower() == 'dev':
         max_matriculas = 99
     else:
-        max_matriculas = current_user.max_matriculas or 1
+        max_matriculas = obtener_max_matriculas_usuario(current_user)
 
     return render_template(
     'matriculas.html',
@@ -278,7 +292,7 @@ def agregar_matricula():
     if (current_user.plan or '').lower() == 'dev':
         max_matriculas = 99
     else:
-        max_matriculas = current_user.max_matriculas or 1
+        max_matriculas = obtener_max_matriculas_usuario(current_user)
 
     if activas >= max_matriculas:
         flash('Tu plan no permite agregar más matrículas.', 'error')
