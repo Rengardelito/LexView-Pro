@@ -51,8 +51,22 @@ FLASK_PORT       = 5000
 FLASK_STARTUP_TIMEOUT = 15  # segundos esperando que Flask levante
 
 # Directorios que el updater PUEDE reemplazar
-UPDATABLE_DIRS  = ["bots", "helpers", "templates", "static"]
-UPDATABLE_FILES = ["app.py", "config.py", "launcher.py"]
+UPDATABLE_DIRS = [
+    "bots",
+    "helpers",
+    "templates",
+    "static",
+    "database",
+    "lexview_docs",
+]
+
+UPDATABLE_FILES = [
+    "app.py",
+    "config.py",
+    "launcher.py",
+    "telemetria.py",
+    "version.txt",
+]
 
 # Directorios que NUNCA se tocan
 PROTECTED_DIRS  = ["data"]
