@@ -24,6 +24,7 @@ UPDATABLE_FILES = [
     "app.py",
     "config.py",
     "launcher.py",
+    "telemetria.py",
     "version.txt",
 ]
 
@@ -33,6 +34,7 @@ UPDATABLE_DIRS = [
     "templates",
     "static",
     "database",
+    "lexview_docs",
 ]
 
 EXE_CANDIDATES = [
