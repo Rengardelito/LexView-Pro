@@ -10,6 +10,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from lexview_docs.revision_manual import generar_revision_manual
+
 import config
 
 
@@ -1085,15 +1087,24 @@ def sincronizar_pdfs(
         exitosos_reintento = 0
         aun_fallidos = []
 
-        for item in fallidos:
+        for idx_item, item in enumerate(fallidos):
+            if _forum_en_error(driver):
+                print("⚠️ Forum quedó en pantalla de error 504/Gateway. Se cancelan reintentos para evitar fallas en cascada.")
+                aun_fallidos.extend(fallidos[idx_item:])
+                break
+
             numero_id = item["numero_id"]
             nombre_final = item["nombre_final"]
-            tipo_str = item["tipo_str"]
             pagina_orig = item["pagina"]
 
             print(f"  🔁 Reintentando ID:{numero_id} página {pagina_orig}...")
 
             try:
+                if _forum_en_error(driver):
+                    print("⚠️ Forum devolvió 504/Gateway antes de reintentar. Archivo queda para revisión manual.")
+                    aun_fallidos.append(item)
+                    continue
+
                 if not _ir_a_pagina(driver, pagina_orig):
                     print(f"  ⚠️ No pude volver a página {pagina_orig}")
                     aun_fallidos.append(item)
@@ -1141,6 +1152,16 @@ def sincronizar_pdfs(
         print(f"🔁 Reintentos: {exitosos_reintento} recuperados, {len(aun_fallidos)} sin resolver")
 
         if aun_fallidos:
+            try:
+                generar_revision_manual(
+                    ruta_local=ruta_local,
+                    fallidos=aun_fallidos,
+                    descargas_totales=descargas_totales,
+                    motivo="Forum devolvió error o no permitió reintentar algunos archivos."
+                )
+            except Exception as e:
+                print(f"⚠️ No se pudo generar el informe PDF de revisión manual: {e}")
+
             print(f"\n{'=' * 60}")
             print(f"⚠️ ARCHIVOS QUE REQUIEREN REVISIÓN MANUAL ({len(aun_fallidos)})")
             print(f"{'=' * 60}")
@@ -1154,8 +1175,8 @@ def sincronizar_pdfs(
                 )
 
             print(f"{'=' * 60}")
-            print("  → Ingresá manualmente al expediente y verificá estos archivos.")
-            print("  → Puede ser que el servidor devuelva el PDF corrupto o vacío.")
+            print("  → Se generó automáticamente REVISION MANUAL - LEER.pdf en la carpeta del expediente.")
+            print("  → Ingresá manualmente al expediente en Forum para verificar esos archivos.")
             print(f"{'=' * 60}\n")
 
     print(
@@ -1186,6 +1207,23 @@ def _obtener_total_paginas(driver) -> int:
 
     return 1
 
+def _forum_en_error(driver) -> bool:
+    try:
+        texto = (driver.page_source or "").lower()
+        titulo = (driver.title or "").lower()
+
+        errores = [
+            "504 gateway time-out",
+            "gateway time-out",
+            "the server didn't respond in time",
+            "502 bad gateway",
+            "503 service unavailable",
+        ]
+
+        return any(e in texto or e in titulo for e in errores)
+
+    except Exception:
+        return False
 
 def _ir_a_pagina(driver, numero_pagina: int) -> bool:
     try:

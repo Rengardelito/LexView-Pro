@@ -9,6 +9,7 @@ from bots.forum_driver import login_forum, entrar_a_expediente, sincronizar_pdfs
 from bots.driver_manager import get_driver, release_driver, is_logged_in, marcar_ocupado, marcar_libre
 from database.models import db, CausaInfo
 import config
+from telemetria import enviar_evento
 
 
 def _limpiar_temp(socketio):
@@ -279,6 +280,7 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
     pdfs_descargados = 0
     exptes_sin_nuevos = 0
     exptes_no_encontrados = 0
+    total = 0
 
     try:
         socketio.emit('bot_status', {'msg': '🔑 Abriendo Forum...', 'progreso': 5})
@@ -301,6 +303,7 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
                     juzgado = e.get("juzgado", "") or ""
                     secretaria = e.get("secretaria", "") or ""
                     localidad = e.get("localidad") or "Capital"
+
                     if not secretaria or "SIN" in secretaria.upper():
                         db_causa = CausaInfo.query.filter(
                             CausaInfo.numero == nro,
@@ -311,16 +314,16 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
                             juzgado = db_causa.juzgado or juzgado
                             secretaria = db_causa.secretaria or secretaria
                             tipo = db_causa.tipo or tipo
+                            localidad = localidad or db_causa.localidad or "Capital"
 
                     lista_causas.append({
-                    "numero": nro,
-                    "tipo": tipo,
-                    "juzgado": juzgado or "SIN JUZGADO",
-                    "secretaria": secretaria or "SIN SECRETARIA",
-                    "localidad": localidad,
-                    "cantidad": e.get("cantidad"),
-                })
-                    
+                        "numero": nro,
+                        "tipo": tipo,
+                        "juzgado": juzgado or "SIN JUZGADO",
+                        "secretaria": secretaria or "SIN SECRETARIA",
+                        "localidad": localidad,
+                        "cantidad": e.get("cantidad"),
+                    })
 
         else:
             with app.app_context():
@@ -336,7 +339,7 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
                         "tipo": c.tipo or "",
                         "juzgado": c.juzgado or "SIN JUZGADO",
                         "secretaria": c.secretaria or "SIN SECRETARIA",
-                        "localidad": "Capital",
+                        "localidad": c.localidad or "Capital",
                         "cantidad": None,
                     }
                     for c in causas
@@ -351,9 +354,44 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
 
         total = len(lista_causas)
 
+        try:
+            enviar_evento(
+                usuario_id=usuario_id,
+                evento="SYNC_START",
+                detalle="Inicio completar historial",
+                modulo="SYNC",
+                nivel="info",
+                datos={
+                    "modo": "completar_historial",
+                    "expedientes_total": total,
+                    "max_exptes": max_exptes
+                }
+            )
+        except Exception as e:
+            print(f"[TELEMETRIA] Error registrando SYNC_START: {e}")
+
         if total == 0:
+            duracion = round(time.time() - t0, 2)
+
+            try:
+                enviar_evento(
+                    usuario_id=usuario_id,
+                    evento="SYNC_EMPTY",
+                    detalle="No hay expedientes para completar",
+                    modulo="SYNC",
+                    nivel="info",
+                    datos={
+                        "modo": "completar_historial",
+                        "expedientes_total": 0,
+                        "duracion_segundos": duracion
+                    },
+                    duracion_segundos=duracion
+                )
+            except Exception as e:
+                print(f"[TELEMETRIA] Error registrando SYNC_EMPTY: {e}")
+
             socketio.emit('bot_status', {
-                'msg': '📭 No hay expedientes para completar',
+                'msg': 'No hay expedientes para completar',
                 'progreso': 100
             })
             socketio.emit('bot_finished', {})
@@ -428,9 +466,6 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
                         causa_db.paginas_descargadas_total = total_local
                         causa_db.ultima_sync = datetime.utcnow()
 
-                        # Si el usuario eligió "Todas", cantidad viene como None.
-                        # En ese caso, si el bot terminó de recorrer Forum, lo damos por completo,
-                        # aunque el total_forum sea una estimación por páginas.
                         if cantidad is None:
                             causa_db.estado_sync = "sincronizado"
                             causa_db.necesita_sync = False
@@ -483,9 +518,40 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
                 })
 
         tiempo_total = int(time.time() - t0)
+        duracion = round(time.time() - t0, 2)
         mins = tiempo_total // 60
         segs = tiempo_total % 60
         tiempo_str = f"{mins}m {segs}s" if mins > 0 else f"{segs}s"
+
+        if exptes_no_encontrados > 0:
+            evento_sync = "SYNC_PARTIAL"
+            nivel_sync = "warning"
+            detalle_sync = "Completar historial finalizado con expedientes no encontrados"
+        else:
+            evento_sync = "SYNC_OK"
+            nivel_sync = "success"
+            detalle_sync = "Completar historial finalizado correctamente"
+
+        try:
+            enviar_evento(
+                usuario_id=usuario_id,
+                evento=evento_sync,
+                detalle=detalle_sync,
+                modulo="SYNC",
+                nivel=nivel_sync,
+                datos={
+                    "modo": "completar_historial",
+                    "expedientes_total": total,
+                    "expedientes_con_pdfs_nuevos": exptes_procesados,
+                    "expedientes_sin_nuevos": exptes_sin_nuevos,
+                    "expedientes_no_encontrados": exptes_no_encontrados,
+                    "pdfs_descargados": pdfs_descargados,
+                    "duracion_segundos": duracion
+                },
+                duracion_segundos=duracion
+            )
+        except Exception as e:
+            print(f"[TELEMETRIA] Error registrando {evento_sync}: {e}")
 
         socketio.emit('bot_status', {'msg': '🏁 Historial completado', 'progreso': 100})
         socketio.emit('bot_status', {'msg': '━' * 40})
@@ -504,6 +570,30 @@ def ejecutar_completar_historial(usuario_id, usuario_nombre, socketio, app, max_
     except Exception as e:
         import traceback
         traceback.print_exc()
+
+        duracion = round(time.time() - t0, 2)
+
+        try:
+            enviar_evento(
+                usuario_id=usuario_id,
+                evento="SYNC_ERROR",
+                detalle=str(e),
+                modulo="SYNC",
+                nivel="error",
+                datos={
+                    "modo": "completar_historial",
+                    "expedientes_total": total,
+                    "expedientes_con_pdfs_nuevos": exptes_procesados,
+                    "expedientes_sin_nuevos": exptes_sin_nuevos,
+                    "expedientes_no_encontrados": exptes_no_encontrados,
+                    "pdfs_descargados": pdfs_descargados,
+                    "duracion_segundos": duracion
+                },
+                duracion_segundos=duracion
+            )
+        except Exception as tel_error:
+            print(f"[TELEMETRIA] Error registrando SYNC_ERROR: {tel_error}")
+
         socketio.emit('bot_status', {'msg': f'❌ Error crítico: {str(e)}'})
 
     finally:

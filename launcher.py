@@ -52,7 +52,7 @@ FLASK_STARTUP_TIMEOUT = 15  # segundos esperando que Flask levante
 
 # Directorios que el updater PUEDE reemplazar
 UPDATABLE_DIRS  = ["bots", "helpers", "templates", "static"]
-UPDATABLE_FILES = ["app.py", "config.py"]
+UPDATABLE_FILES = ["app.py", "config.py", "launcher.py"]
 
 # Directorios que NUNCA se tocan
 PROTECTED_DIRS  = ["data"]
@@ -112,7 +112,8 @@ def version_tuple(v: str):
         return tuple(int(x) for x in v.strip().split("."))
     except ValueError:
         return (0, 0, 0)
-    
+
+
 def checksum_ok(filepath: Path, expected_sha256: str) -> bool:
     """Verifica integridad del archivo descargado."""
     sha256 = hashlib.sha256()
@@ -291,6 +292,12 @@ class AutoUpdater:
             cfg["last_license_check"] = time.strftime("%Y-%m-%d")
             guardar_config(cfg)
 
+            try:
+                from telemetria import heartbeat
+                heartbeat("APP_OPEN", "Licencia validada correctamente")
+            except Exception as e:
+                log.debug(f"No se pudo enviar heartbeat desde launcher: {e}")
+
             log.info("Licencia validada correctamente.")
             return True
 
@@ -347,7 +354,7 @@ class AutoUpdater:
             self.splash.set_status("Verificando actualizaciones...", 5)
             resp = requests.get(
                 VPS_VERSION_URL,
-                params={"hw_id": self.hw_id},
+                params={"hw_id": self.hw_id, "client_version": self.local_version},
                 timeout=8,
             )
             if resp.status_code != 200:
@@ -447,6 +454,17 @@ class AutoUpdater:
                         log.info(f"Saltando archivo protegido: {rel_path}")
                         continue
 
+                    # Caso especial: el EXE no se puede reemplazar mientras está corriendo.
+                    # Lo dejamos preparado como LexViewPro.exe.new para reemplazo diferido.
+                    if str(rel_path) == "LexViewPro.exe":
+                        exe_new = self.base_dir / "LexViewPro.exe.new"
+
+                        with zf.open(member) as src, open(exe_new, "wb") as dst:
+                            shutil.copyfileobj(src, dst)
+
+                        log.info(f"EXE nuevo preparado para reemplazo diferido: {exe_new}")
+                        continue
+
                     is_updatable = (
                         str(rel_path) in UPDATABLE_FILES
                         or top_level in UPDATABLE_DIRS
@@ -510,6 +528,57 @@ class AutoUpdater:
                 shutil.copytree(src, dest)
         log.info("Backup restaurado.")
 
+    def _reemplazar_exe_y_reiniciar(self) -> bool:
+        """
+        Reemplaza LexViewPro.exe de forma diferida.
+
+        No se puede pisar el EXE mientras está ejecutándose.
+        Por eso apply_update() deja el nuevo como LexViewPro.exe.new
+        y esta función crea un .bat que:
+          1. espera unos segundos,
+          2. cierra cualquier LexViewPro.exe restante,
+          3. renombra el EXE actual a .bak,
+          4. renombra LexViewPro.exe.new a LexViewPro.exe,
+          5. vuelve a abrir LexViewPro.exe.
+        """
+        exe_actual = self.base_dir / "LexViewPro.exe"
+        exe_new = self.base_dir / "LexViewPro.exe.new"
+        exe_bak = self.base_dir / "LexViewPro.exe.bak"
+        bat_path = self.base_dir / "_finish_update.bat"
+
+        if not exe_new.exists():
+            log.info("No hay EXE nuevo pendiente de reemplazo.")
+            return False
+
+        bat = f"""@echo off
+cd /d "{self.base_dir}"
+timeout /t 2 /nobreak >nul
+taskkill /F /IM LexViewPro.exe >nul 2>&1
+timeout /t 1 /nobreak >nul
+
+if exist "{exe_bak.name}" del /F /Q "{exe_bak.name}"
+if exist "{exe_actual.name}" ren "{exe_actual.name}" "{exe_bak.name}"
+
+ren "{exe_new.name}" "{exe_actual.name}"
+
+start "" "{exe_actual.name}"
+
+del "%~f0"
+"""
+
+        bat_path.write_text(bat, encoding="utf-8")
+
+        log.info(f"Programando reemplazo diferido del EXE con: {bat_path}")
+
+        subprocess.Popen(
+            ["cmd", "/c", str(bat_path)],
+            cwd=str(self.base_dir),
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+
+        return True
+
+
     # ── Flujo completo ───────────────────────────────────────
     def run(self) -> bool:
         """
@@ -548,10 +617,8 @@ class AutoUpdater:
             self.splash.set_status(f"✓ Actualizado a v{new_version}", 100)
             time.sleep(1)
 
-            try:
-                shutil.rmtree(zip_path.parent, ignore_errors=True)
-            except Exception:
-                pass
+            exe_new = self.base_dir / "LexViewPro.exe.new"
+            log.info(f"Post-update: buscando EXE nuevo en {exe_new} | existe={exe_new.exists()}")
 
             messagebox.showinfo(
                 "Actualización completada",
@@ -559,6 +626,22 @@ class AutoUpdater:
             )
 
             self.splash.close()
+
+            if exe_new.exists():
+                log.info("EXE nuevo detectado. Ejecutando reemplazo diferido.")
+                if self._reemplazar_exe_y_reiniciar():
+                    sys.exit(0)
+                else:
+                    log.error("Falló la creación/ejecución del reemplazo diferido.")
+
+            else:
+                log.warning("No existe LexViewPro.exe.new. Se reinicia sin reemplazar EXE.")
+
+            try:
+                shutil.rmtree(zip_path.parent, ignore_errors=True)
+            except Exception:
+                pass
+
             os.execv(sys.executable, [sys.executable] + sys.argv)
 
             return True

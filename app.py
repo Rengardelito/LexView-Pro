@@ -7,6 +7,7 @@ import re
 import threading
 from datetime import date, datetime
 from pathlib import Path
+from telemetria import enviar_evento
 
 import config
 from config import BASE_DATOS_PDFS, CARPETA_HOTFOLDER, OUTPUT_STATIC
@@ -228,8 +229,15 @@ def seleccionar_carpeta():
 # ============================================================
 # MATRÍCULAS FORUM
 # ============================================================
+def normalizar_plan(plan):
+    plan = (plan or "").strip().lower()
+    plan = plan.replace("plan_", "")
+    plan = plan.replace("-", "_")
+    return plan
+
+
 def obtener_max_matriculas_usuario(usuario):
-    plan = (usuario.plan or "").lower()
+    plan = normalizar_plan(usuario.plan)
 
     if plan == "dev":
         return 99
@@ -237,7 +245,7 @@ def obtener_max_matriculas_usuario(usuario):
     if plan == "estudio":
         return 3
 
-    if plan == "profesional":
+    if plan in ("profesional", "pro"):
         return 1
 
     return usuario.max_matriculas or 1
@@ -252,7 +260,7 @@ def matriculas():
     principal_cargada = 1 if current_user.matricula else 0
     adicionales_activas = len([m for m in matriculas_db if m.activa])
     usadas = principal_cargada + adicionales_activas
-    if (current_user.plan or '').lower() == 'dev':
+    if normalizar_plan(current_user.plan) == 'dev':
         max_matriculas = 99
     else:
         max_matriculas = obtener_max_matriculas_usuario(current_user)
@@ -289,7 +297,7 @@ def agregar_matricula():
 
     activas = principal_cargada + adicionales_activas
 
-    if (current_user.plan or '').lower() == 'dev':
+    if normalizar_plan(current_user.plan) == 'dev':
         max_matriculas = 99
     else:
         max_matriculas = obtener_max_matriculas_usuario(current_user)
@@ -554,6 +562,10 @@ def importar_desde_lista():
 @app.route('/')
 @login_required
 def dashboard():
+    try:
+        enviar_evento("DASHBOARD_OPEN", "Panel principal abierto")
+    except Exception:
+        pass
     usuario = current_user.username
     matriculas_forum_json = []
     hoy = date.today()
@@ -991,7 +1003,7 @@ def ejecutar_sync_con_cantidad(
     from bots.sincronizador import ejecutar_completar_historial
 
     expedientes = expedientes or []
-
+    
     with app.app_context():
         query = CausaInfo.query.filter(
             CausaInfo.usuario_id == usuario_id,
@@ -1033,7 +1045,7 @@ def ejecutar_sync_con_cantidad(
             'progreso': 100
         })
         socketio.emit('bot_finished', {})
-        return
+        
 
     txt = "TODAS" if cantidad_int is None else str(cantidad_int)
     txt_lote = f" | lote {lote}" if lote else ""
@@ -1050,7 +1062,7 @@ def ejecutar_sync_con_cantidad(
         app,
         lista_exptes=lista_exptes
     )
-
+    
 @app.route('/run_completar_historial', methods=['POST'])
 @login_required
 @requiere_feature('sincronizar')
@@ -1849,7 +1861,141 @@ def asegurar_columnas_sync():
     conn.commit()
     conn.close()
 
+def puente_actualizar_exe_2310():
+    """
+    Parche puente para instalaciones 2.3.9:
+    el launcher viejo actualiza app.py pero salta LexViewPro.exe.
+    Este puente prepara LexViewPro.exe.new desde el ZIP oficial 2.3.10.
+    """
+    try:
+        bridge_log = Path(__file__).parent.parent / "exe_bridge.log"
 
+        def blog(msg):
+            try:
+                with open(bridge_log, "a", encoding="utf-8") as f:
+                    f.write(f"{datetime.now()} {msg}\n")
+            except Exception:
+                pass
+
+        blog("[EXE BRIDGE] Iniciando puente EXE 2.3.10")
+        import logging
+        log = logging.getLogger("launcher")
+        log.info("[EXE BRIDGE] Iniciando puente EXE 2.3.10")
+        import requests
+        import zipfile
+        import tempfile
+        import shutil
+        import subprocess
+        import sys
+        import hashlib
+
+        base_dir = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent.parent
+        blog(f"base_dir={base_dir}")
+        blog(f"sys.executable={sys.executable}")
+        blog(f"__file__={__file__}")
+        exe_actual = base_dir / "LexViewPro.exe"
+        exe_new = base_dir / "LexViewPro.exe.new"
+        bat_path = base_dir / "_finish_update.bat"
+        bridge_done = base_dir / ".exe_bridge_2310_done"
+
+        if bridge_done.exists():
+            log.info("[EXE BRIDGE] Puente ya ejecutado antes. Salgo.")
+            return
+
+        log.info(f"[EXE BRIDGE] base_dir={base_dir}")
+        log.info(f"[EXE BRIDGE] exe_actual={exe_actual} existe={exe_actual.exists()}")
+        log.info(f"[EXE BRIDGE] exe_new={exe_new} existe={exe_new.exists()}")
+
+        if exe_new.exists():
+            log.info("[EXE BRIDGE] Ya existe LexViewPro.exe.new, no hago nada.")
+            return
+
+        from config import get_hardware_id
+        hw_id = get_hardware_id()
+
+        r = requests.get(
+            "https://lexviewpro.com.ar/api/version",
+            params={"hw_id": hw_id},
+            timeout=8
+        )
+        data = r.json()
+
+        log.info(f"[EXE BRIDGE] Version endpoint={data.get('version')}")
+
+        if data.get("version") != "2.3.10":
+            log.info("[EXE BRIDGE] Endpoint no está en 2.3.10, salgo.")
+            return
+
+        url = data.get("download_url")
+        sha = data.get("sha256")
+
+        tmp_dir = Path(tempfile.mkdtemp(prefix="lexview_exe_bridge_"))
+        zip_path = tmp_dir / "update.zip"
+
+        rz = requests.get(url, timeout=60)
+        rz.raise_for_status()
+        zip_path.write_bytes(rz.content)
+
+        if sha:
+            real_sha = hashlib.sha256(zip_path.read_bytes()).hexdigest()
+            if real_sha != sha:
+                print("[EXE BRIDGE] SHA inválido")
+                return
+
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            nombre_exe = None
+            for n in zf.namelist():
+                if n.replace("\\", "/") == "update/LexViewPro.exe":
+                    nombre_exe = n
+                    break
+
+            if not nombre_exe:
+                print("[EXE BRIDGE] No encontré update/LexViewPro.exe")
+                return
+
+            with zf.open(nombre_exe) as src, open(exe_new, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+            size_new = exe_new.stat().st_size if exe_new.exists() else 0
+            log.info(f"[EXE BRIDGE] EXE new creado: {exe_new} existe={exe_new.exists()} size={size_new}")
+
+            if size_new < 5_000_000:
+                log.error(f"[EXE BRIDGE] EXE new inválido o incompleto. Abortando reemplazo. size={size_new}")
+                try:
+                    exe_new.unlink()
+                except Exception:
+                    pass
+                return
+
+        bat = f"""@echo off
+cd /d "{base_dir}"
+timeout /t 2 /nobreak >nul
+taskkill /F /IM LexViewPro.exe >nul 2>&1
+timeout /t 1 /nobreak >nul
+
+if exist "LexViewPro.exe.bak" del /F /Q "LexViewPro.exe.bak"
+if exist "LexViewPro.exe" ren "LexViewPro.exe" "LexViewPro.exe.bak"
+ren "LexViewPro.exe.new" "LexViewPro.exe"
+
+start "" "LexViewPro.exe"
+del "%~f0"
+"""
+
+        bat_path.write_text(bat, encoding="utf-8")
+        log.info(f"[EXE BRIDGE] Ejecutando BAT: {bat_path}")
+        subprocess.Popen(
+            ["cmd", "/c", str(bat_path)],
+            cwd=str(base_dir),
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        bridge_done.write_text("ok", encoding="utf-8")
+        os._exit(0)
+
+    except Exception as e:
+        try:
+            blog(f"[EXE BRIDGE] Error: {e}")
+        except Exception:
+            pass
 # ============================================================
 # ARRANQUE
 # ============================================================
@@ -1857,6 +2003,12 @@ def run_app():
     with app.app_context():
         db.create_all()
         asegurar_columnas_sync()
+        puente_actualizar_exe_2310()
+
+    try:
+        enviar_evento("APP_OPEN", "LexView Pro iniciado")
+    except Exception:
+        pass
 
     socketio.run(app, debug=False, host='127.0.0.1', port=5000, allow_unsafe_werkzeug=True)
 
@@ -1865,6 +2017,12 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         asegurar_columnas_sync()
+        puente_actualizar_exe_2310()
+
+    try:
+        enviar_evento("APP_OPEN", "LexView Pro iniciado")
+    except Exception:
+        pass
 
     socketio.run(app, debug=False, host='0.0.0.0', port=5000)
 
